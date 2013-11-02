@@ -431,6 +431,7 @@ class Render:
 
         if loc in settings.obstacles:
             return '#222'
+            
         robot = self._game.robot_at_loc(loc)
         if robot is not None:
             return 'red' if robot == 0 else 'green'

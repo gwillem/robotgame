@@ -6,60 +6,97 @@ import basebot
 
 class Robot(basebot.BaseBot):
 
-  def act(self, game):
-    robots = game['robots']
-    locs = self.adjacents()
-    
-    if self.player_id == 0:
-        self.color = "RED"
-        self.TARGET = (9,3)
-    else:
-        self.color = "GREEN"
-        self.TARGET = (9,15)
-
-    print "%6s %s, possibles: %s" % (self.color, self.location, locs)
-    
-
-
-    #~ if self.location in basebot.SPAWN_COORDS:
-        #~ print "I, Robot, am at a spawn location"
-    
-    # no squares with our bots. enemy bots are fine, we kill them
-    #~ locs = [loc for loc in locs if (not robots.get(loc) or (robots.get(loc)['player_id'] != self.player_id))]
-    
-    # only squares closer to the center
-    #~ locs = [loc for loc in locs if center_distance(loc) < center_distance(self.location)]
-
-    valid_choices = []
-    
-    for loc in locs:
+    def find_enemy_neighbours(self, center, own_id=None):
         
-        ## don't go there, as we will be crushed by new spawns
-        if loc in basebot.SPAWN_COORDS:
-            continue
+        if not own_id:
+            own_id = self.player_id
             
-        ## already occupied
-        if loc in robots:
-            continue
-
-        ## farther away from target
-        if basebot.distance(self.TARGET, loc) > basebot.distance(self.TARGET, self.location):
-            #~ print "\tDiscarding %s as it is farther away from target %s than my current location %s" % \
-                #~ (loc, self.TARGET, self.location)
-            continue 
-
-        valid_choices.append(loc)
-           
-    ## stay put
-    if not valid_choices: 
-        return ['guard']
+        neighbours = self.adjacents(center, filter_empty=True, filter_id=own_id)
             
-    loc = random.choice(valid_choices)
-    #~ if robots.get(loc):
-        #~ return ['attack', loc]
-    
-    print "\tMOVE %s" % (loc,)
-    
-    return ['move', loc]
-    
-    
+        #~ print "\tFor loc %s, found enemy neighbours (! %s): %s" % (center, own_id, neighbours) 
+            
+        return neighbours
+
+    def enemies(self):
+        return [loc for loc in self.robots if self.robots[loc]['player_id'] != self.player_id]
+        
+    def isolated_enemies(self):
+        return [loc for loc in self.enemies() if not self.find_enemy_neighbours(loc)]
+
+    def find_closest(self, locs, center=None):
+        
+        if not locs:
+            return None
+         
+        if not center:
+            center = self.location
+            
+        #~ print "\tWill calculate distance from %s to %s" % (center, locs)
+             #~ 
+        #~ for loc in locs:
+            #~ print "\t%s -> %s == %s" % (center, loc, basebot.distance(center,loc) )
+             
+        locs.sort(key = lambda x: basebot.distance(center, x) )
+        
+        return locs[0]
+            
+
+    def act(self, game):
+        self.robots = game['robots']
+        self.turn = game['turn']
+        self.target = None
+
+        locs = self.adjacents()
+
+        if self.player_id == 0:
+            self.color = "RED"
+            self.TARGET = (9,3)
+        else:
+            self.color = "GREEN"
+            self.TARGET = (9,15)
+
+        print "%6s %s, possibles: %s" % (self.color, self.location, locs)
+
+        #~ print "\tMy enemies are          %s" % self.enemies()
+
+        isolated_suckers = self.isolated_enemies()
+        print "\tMy isolated enemies are %s" % isolated_suckers
+        
+        if isolated_suckers:
+            self.target = self.find_closest(locs=isolated_suckers)
+            #~ print "\tThere are isolated suckers, I found %s to be the closest " % (self.target,)
+        
+        
+        valid_choices = []
+
+        for loc in locs:
+            
+            ## don't go there, as we will be crushed by new spawns
+            if loc in basebot.SPAWN_COORDS:
+                continue
+                
+            ## already occupied by myself
+            if loc in self.robots and self.robots[loc]['player_id'] == self.player_id:
+                continue
+
+            ## farther away from target
+            if basebot.distance(self.target, loc) > basebot.distance(self.target, self.location):
+                #~ print "\tDiscarding %s as it is farther away from target %s than my current location %s" % \
+                    #~ (loc, self.TARGET, self.location)
+                continue 
+
+            valid_choices.append(loc)
+               
+        ## stay put
+        if not valid_choices: 
+            return ['guard']
+                
+        loc = random.choice(valid_choices)
+        if loc in self.robots:
+            print "\tATTACK %s" % (loc,)
+            return ['attack', loc]
+
+        print "\tMOVE %s" % (loc,)
+        return ['move', loc]
+
+

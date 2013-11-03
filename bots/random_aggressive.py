@@ -16,7 +16,7 @@ class Robot(basebot.BaseBot):
         self.color = "GREEN"
         self.TARGET = (9,15)
 
-    print "%6s %s, possibles: %s" % (self.color, self.location, locs)
+    #~ print "%6s %s, possibles: %s" % (self.color, self.location, locs)
     
     #~ if self.location in basebot.SPAWN_COORDS:
         #~ print "I, Robot, am at a spawn location"
@@ -49,7 +49,7 @@ class Robot(basebot.BaseBot):
     if robots.get(loc):
         return ['attack', loc]
     
-    print "\tMOVE %s" % (loc,)
+    #~ print "\tMOVE %s" % (loc,)
     
     return ['move', loc]
     

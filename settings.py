@@ -36,7 +36,7 @@
     'suicide_damage': 10,
     'exposed_properties': ('location', 'hp', 'player_id'),
     'valid_commands': ('move', 'attack', 'guard', 'suicide'),
-    'turn_interval': 100,
+    'turn_interval': 1000,
     'max_turns': 100,
     'rating_range': 150,
     'default_rating': 1200,

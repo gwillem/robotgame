@@ -13,18 +13,33 @@ OBSTACLE_COORDS = [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0
 def distance(loc1, loc2):
   return abs(loc1[0] - loc2[0]) + abs(loc1[1] - loc2[1])
 
+def has_enemy_neighbours(field, enemy):
+    """ {(4, 6): {'hp': 50, 'location': (4, 6), 'player_id': 0},
+            (5, 10): {'hp': 50, 'location': (5, 10), 'player_id': 0},"""
+
+    
+
 class BaseBot:
     
-    def adjacents(self):
+    def adjacents(self, location=None, filter_id=None, filter_empty=False):
         
-        locs = ((self.location[0], self.location[1] + 1),
-            (self.location[0], self.location[1] - 1),
-            (self.location[0] + 1, self.location[1]),
-            (self.location[0] - 1, self.location[1]))
+        if not location:
+            location = self.location
+                    
+        locs = ((location[0], location[1] + 1),
+            (location[0], location[1] - 1),
+            (location[0] + 1, location[1]),
+            (location[0] - 1, location[1]))
+        
+        ## always filter boundary    
+        locs = [loc for loc in locs if loc not in OBSTACLE_COORDS]
+        
+        if filter_empty:
+            locs = [loc for loc in locs if loc in self.robots]
             
-        valid_locs = [loc for loc in locs if loc not in OBSTACLE_COORDS]
-        
-        return valid_locs
+        if filter_id:
+            locs = [loc for loc in locs if loc not in self.robots \
+                or self.robots[loc]['player_id'] != filter_id]
+            
+        return locs
     
-    def distance_from_me(self, loc):
-        return distance(self.location, loc)

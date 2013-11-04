@@ -301,7 +301,6 @@ class Game:
 
     def robot_at_loc(self, loc):
         robot = self._field[loc]
-        #~ return robot.player_id if robot else None
         return robot
 
     def spawn_robot(self, player_id, loc):
@@ -436,8 +435,8 @@ class Render:
         robot = self._game.robot_at_loc(loc)
         if robot is None:
             return 'white'
-            
-        damage = robot.hp / 5
+
+        ## healthy robot has 50 hp so max 15
         colorhex = 5 + robot.hp / 5
         
         if robot.player_id == 0: # red

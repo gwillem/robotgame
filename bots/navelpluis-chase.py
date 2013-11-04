@@ -3,6 +3,11 @@ import random
 import pprint
 import basebot
 
+def all(iterable):
+    for element in iterable:
+        if not element:
+            return False
+    return True
 
 class Robot(basebot.BaseBot):
 
@@ -57,10 +62,14 @@ class Robot(basebot.BaseBot):
 
         print "%6s %s, possibles: %s" % (self.color, self.location, locs)
 
+
+            
+            
+
         #~ print "\tMy enemies are          %s" % self.enemies()
 
         isolated_suckers = self.isolated_enemies()
-        print "\tMy isolated enemies are %s" % isolated_suckers
+        #~ print "\tMy isolated enemies are %s" % isolated_suckers
         
         if isolated_suckers:
             self.target = self.find_closest(locs=isolated_suckers)
@@ -86,6 +95,12 @@ class Robot(basebot.BaseBot):
                 continue 
 
             valid_choices.append(loc)
+
+        ## figure out if i'm at a spawn corner, if yes, then move
+        all_my_options_are_spawn_coords = all([loc in basebot.SPAWN_COORDS for loc in loc])
+        if self.location in basebot.SPAWN_COORDS and all_my_options_are_spawn_coords:
+            print "\tWARNING I'm in the corner so i need to move to another spawn coord"
+            valid_choices = locs
                
         ## stay put
         if not valid_choices: 

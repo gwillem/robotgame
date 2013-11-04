@@ -25,7 +25,9 @@ if __name__ == '__main__':
         else:
             for i in range(game.settings.max_turns):
                 g.run_turn()
-            print g.get_scores()
+            scores = g.get_scores()
+            print scores
+            print scores[1] - scores[0]
 
     except codejail.SecurityError as e:
         print 'security breach by player %d: %s' % (e.player_id, e.message)

@@ -89,7 +89,7 @@ class Robot(basebot.BaseBot):
                 continue
 
             ## farther away from target
-            if basebot.distance(self.target, loc) > basebot.distance(self.target, self.location):
+            if self.target and basebot.distance(self.target, loc) > basebot.distance(self.target, self.location):
                 #~ print "\tDiscarding %s as it is farther away from target %s than my current location %s" % \
                     #~ (loc, self.TARGET, self.location)
                 continue 

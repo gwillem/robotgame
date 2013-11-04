@@ -367,7 +367,7 @@ class Game:
         return scores
 
 class Render:
-    def __init__(self, game, block_size=20):
+    def __init__(self, game, block_size=30):
         global settings
 
         self._blocksize = block_size

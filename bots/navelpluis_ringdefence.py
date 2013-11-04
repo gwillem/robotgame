@@ -81,9 +81,14 @@ class Robot(basebot.BaseBot):
             if loc in self.robots and self.robots[loc]['player_id'] == self.player_id:
                 score -= 50
 
+            if self.turn >= 60:
+                radius = int(self.turn / 10) - 2 # 90 => 7
+            else:
+                radius = 3
+
             ## farther away from target
-            new_ring_distance = ring_distance(loc)
-            old_ring_distance = ring_distance(self.location)
+            new_ring_distance = ring_distance(loc, radius)
+            old_ring_distance = ring_distance(self.location, radius)
 
             #~ print "loc: %s has old and new ring distance: %s %s" % (loc,old_ring_distance,new_ring_distance)
             

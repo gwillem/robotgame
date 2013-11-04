@@ -301,7 +301,8 @@ class Game:
 
     def robot_at_loc(self, loc):
         robot = self._field[loc]
-        return robot.player_id if robot else None
+        #~ return robot.player_id if robot else None
+        return robot
 
     def spawn_robot(self, player_id, loc):
         if self.robot_at_loc(loc) is not None:
@@ -433,9 +434,16 @@ class Render:
             return '#222'
             
         robot = self._game.robot_at_loc(loc)
-        if robot is not None:
-            return 'red' if robot == 0 else 'green'
-        return 'white'
+        if robot is None:
+            return 'white'
+            
+        damage = robot.hp / 5
+        colorhex = 5 + robot.hp / 5
+        
+        if robot.player_id == 0: # red
+            return '#%X00' % colorhex
+        else: # green
+            return '#0%X0' % colorhex
 
     def paint(self):
         global settings

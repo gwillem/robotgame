@@ -1,56 +1,37 @@
-import math
-import random
-import pprint
-import basebot
 
-class Robot(basebot.BaseBot):
+""" This bot walks around randomly. If it encounters an enemy bot, it attacks """
+
+import random
+import rg
+
+class Robot():
 
   def act(self, game):
     robots = game['robots']
-    locs = self.adjacents()
+    locs = rg.locs_around(self.location, filter_out=('invalid', 'obstacle'))
     
-    if self.player_id == 0:
-        self.color = "RED"
-        self.TARGET = (9,3)
-    else:
-        self.color = "GREEN"
-        self.TARGET = (9,15)
-
-    #~ print "%6s %s, possibles: %s" % (self.color, self.location, locs)
-    
-    #~ if self.location in basebot.SPAWN_COORDS:
-        #~ print "I, Robot, am at a spawn location"
-    
-    # no squares with our bots. enemy bots are fine, we kill them
-    #~ locs = [loc for loc in locs if (not robots.get(loc) or (robots.get(loc)['player_id'] != self.player_id))]
-    
-    # only squares closer to the center
-    #~ locs = [loc for loc in locs if center_distance(loc) < center_distance(self.location)]
-
-    valid_choices = []
-    
-    for loc in locs:
-        
-        ## don't go there, as we will be crushed by new spawns
-        if loc in basebot.SPAWN_COORDS:
-            continue
-            
-        ## already occupied
-        if loc in robots and robots[loc]['player_id'] == self.player_id:
-            continue
-
-        valid_choices.append(loc)
-           
-    ## stay put
-    if not valid_choices: 
-        return ['guard']
-            
-    loc = random.choice(valid_choices)
-    if robots.get(loc):
+    enemies = [loc for loc in locs if loc in robots and robots[loc]['player_id'] != self.player_id]
+    if enemies: ## attack weakest
+        loc = sorted(enemies, key=lambda x: robots[x]['hp'])[0]
         return ['attack', loc]
     
-    #~ print "\tMOVE %s" % (loc,)
+    ## so no enemy nearby, walk around randomly but prefer non-spawn points
     
-    return ['move', loc]
+    ## filter out my own occupied spots
+    locs = [loc for loc in locs if loc not in robots]
+    
+    ## empty non spawn points?
+    non_spawn = [loc for loc in locs if 'spawn' not in rg.loc_types(loc)]
+    if non_spawn:
+        loc = random.choice(non_spawn)
+        return ['move', loc]
+        
+    spawn = [loc for loc in locs if 'spawn' in rg.loc_types(loc)]
+    if spawn:
+        loc = random.choice(spawn)
+        return ['move', loc]
+        
+    ## no more options
+    return ['guard']
     
     

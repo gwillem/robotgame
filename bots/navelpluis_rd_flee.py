@@ -3,11 +3,14 @@ import math
 
 RADIUS = 7
 
-def ring_distance(loc, radius=RADIUS):
+def ring_distance(loc, radius):
     """ distance to ring around center """
-    return abs(rg.wdist(rg.CENTER_POINT, loc) - RADIUS)
+    return abs(rg.wdist(rg.CENTER_POINT, loc) - radius)
 
 def locs_average(locs):
+    if not locs:
+        return (rg.CENTER_POINT)
+    
     x = sum([loc[0] for loc in locs]) / len(locs)
     y = sum([loc[1] for loc in locs]) / len(locs)
         
@@ -115,13 +118,15 @@ class Robot():
         Move to an area with the least amount of surrounding enemies
         """
         possible_moves = self.adjacents(only_empty=True)
+        possible_moves = [loc for loc in possible_moves if 'spawn' not in rg.loc_types(loc)]
+        
         if not possible_moves: ## todo: raise exception
-            print "Am fleeing but no possible moves, so guarding instead!"
+            #~ print "Am fleeing but no possible moves, so guarding instead!"
             return ['guard']
             
         
         possible_moves.sort(key = self.flee_loc_sort)
-        print "Am fleeing to %s" % ( possible_moves[0], )
+        #~ print "Am fleeing to %s" % ( possible_moves[0], )
         return ['move', possible_moves[0]]
         
         
@@ -140,8 +145,9 @@ class Robot():
 
         self.color = "RED" if self.player_id == 0 else "GREEN"
         
-        print "%6s %2d hp %s" % \
-            (self.color, self.hp, self.location)
+        #~ if self.hp < 50:
+            #~ print "%6s %2d hp %s" % \
+                #~ (self.color, self.hp, self.location)
         
         if self.hp <= 20:
             ## fleeing!
@@ -167,10 +173,12 @@ class Robot():
             if loc in self.robots and self.robots[loc]['player_id'] == self.player_id:
                 score -= 50
 
-            if self.turn >= 60:
+            if self.turn >= 30:
                 radius = int(self.turn / 10) - 2 # 90 => 7
             else:
-                radius = 3
+                radius = 0
+
+            radius = 0 # debug
 
             ## farther away from target
             new_ring_distance = ring_distance(loc, radius)

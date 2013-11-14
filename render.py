@@ -55,6 +55,9 @@ class Render:
 
         if self._game.turns < self._settings.max_turns:
             self._win.after(self._settings.turn_interval, self.callback)
+            
+        if self._game.turns == self._settings.max_turns:
+            self._master.after(10*1000, self._master.quit)
 
     def determine_color(self, loc):
 

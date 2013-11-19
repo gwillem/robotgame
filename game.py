@@ -1,58 +1,37 @@
-from __future__ import division
 import ast
 import inspect
 import random
-import operator
-import math
-import threading
-import Tkinter
 import sys
 import traceback
-import copy
-import time
-import json
-import zlib
-import base64
+import imp
 ###
-import codejail
 from robotexception import *
+from settings import settings
+import rg
 
-LANE_TOP, LANE_MID, LANE_BOT = range(3)
-
-class AttrDict(dict):
-    def __init__(self, *args, **kwargs):
-        super(AttrDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
-
-class SettingsDict:
-    def __init__(self, settings_file, map_file=None):
-        self.d = AttrDict(ast.literal_eval(open('settings.py').read()))
-
-settings = SettingsDict('settings.py').d
-codejail.PlayerCodeJail.allowed_imports = settings.safe_imports
-codejail.PlayerCodeJail.allowed_magic = settings.safe_magic
-
-def load_map(map_file):
-    global settingss
-
+def init_settings(map_file):
+    global settings
     map_data = ast.literal_eval(open(map_file).read())
     settings.spawn_coords = map_data['spawn']
     settings.obstacles = map_data['obstacle']
+    rg.set_settings(settings)
 
 class DefaultRobot:
     def act(self, game):
         return ['guard']
 
 class Player:
-    def __init__(self, player_id, code):
-        global settings
+    def __init__(self, code=None, robot=None):
+        if code is not None:
+            self._robot = None
+            self._mod = imp.new_module('usercode%d' % id(self))
+            exec code in self._mod.__dict__
+        elif robot is not None:
+            self._robot = robot
+        else:
+            raise Exception('you need to provide code or a module')
 
-        self._mod = None
-        self._player_id = player_id
-        self._robot = None
-        self._mod = codejail.PlayerCodeJail(player_id, code).mod
-
-    def get_usercode_class(self, class_name, default):
+    def get_usercode_obj(self, class_name, default):
         if hasattr(self._mod, class_name):
             if inspect.isclass(getattr(self._mod, class_name)):
                 return getattr(self._mod, class_name)()
@@ -61,7 +40,7 @@ class Player:
     def get_robot(self):
         if self._robot is not None:
             return self._robot
-        self._robot = self.get_usercode_class('Robot', DefaultRobot)
+        self._robot = self.get_usercode_obj('Robot', DefaultRobot)
         return self._robot
 
 class InternalRobot:
@@ -71,10 +50,6 @@ class InternalRobot:
         self.player_id = player_id
         self.field = field
         
-    @staticmethod
-    def distance(p1, p2):
-        return math.sqrt(pow(p2[0]-p1[0], 2) + pow(p2[1]-p1[1], 2))
-
     @staticmethod
     def parse_command(action):
         return (action[0], action[1:])
@@ -86,32 +61,17 @@ class InternalRobot:
         if cmd == 'suicide':
             self.call_suicide(actions)
 
-    @staticmethod
-    def loc_in_board(loc):
-        for i in range(2):
-            if not (0 <= loc[i] < settings.board_size):
-                return False
-        return True
-
     def get_robots_around(self, loc):
-        offsets = ((0, 0), (0, 1), (1, 0), (0, -1), (-1, 0))
-        robots = []
-        for offset in offsets:
-            new_loc = tuple(map(operator.add, loc, offset))
-            if InternalRobot.loc_in_board(new_loc):
-                robots.append(self.field[new_loc])
+        locs_around = rg.locs_around(loc, filter_out=['obstacle', 'invalid'])
+        locs_around.append(loc)
+
+        robots = [self.field[x] for x in locs_around]
         return [x for x in robots if x is not None]
 
     def movable_loc(self, loc):
-        if loc is None:
-            return False
-        if InternalRobot.distance(loc, self.location) != 1:
-            return False
-        if loc in settings.obstacles:
-            return False
-        if not InternalRobot.loc_in_board(loc):
-            return False
-        return True
+        good_around = rg.locs_around(self.location,
+            filter_out=['invalid', 'obstacle'])
+        return loc in good_around
 
     def can_act(self, loc, action_table, no_raise=False, move_stack=None):
         global settings
@@ -191,15 +151,15 @@ class InternalRobot:
                     robot.hp -= damage
         except UnitBlockCollision as e:
             if e.other_robot.player_id != self.player_id:
-                e.other_robot.hp -= int(damage)
+               e.other_robot.hp -= int(damage)
         except RobotException:
             pass
 
     def call_suicide(self, action_table):
         self.hp = 0
-        for loc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
-            new_loc = tuple(map(operator.add, loc, self.location))
-            self.call_attack(new_loc, action_table, damage=settings.suicide_damage)
+        self.call_attack(self.location, action_table, damage=settings.suicide_damage)
+        for loc in rg.locs_around(self.location):
+            self.call_attack(loc, action_table, damage=settings.suicide_damage)
 
     @staticmethod
     def is_valid_action(action):
@@ -208,31 +168,14 @@ class InternalRobot:
         cmd, params = InternalRobot.parse_command(action)
         return cmd in settings.valid_commands
 
+# just to make things easier
 class Field:
     def __init__(self, size):
-        self._field = [[None for x in range(size)] for y in range(size)]
-
+        self.field = [[None for x in range(size)] for y in range(size)]
     def __getitem__(self, point):
-        return self._field[point[1]][point[0]]
-
+        return self.field[point[1]][point[0]]
     def __setitem__(self, point, v):
-        self._field[point[1]][point[0]] = v
-
-class TimeoutError: pass
-
-def limit_execution_time(timeout, func, *args, **kwargs):
-    def tracer(frame, event, arg, start=time.time()):
-        now = time.time()
-        if now > start + timeout:
-            raise TimeoutError
-        return tracer if event == "call" else None
-
-    old_tracer = sys.gettrace()
-    try:
-        sys.settrace(tracer)
-        return func(*args, **kwargs)
-    finally:
-        sys.settrace(old_tracer)
+        self.field[point[1]][point[0]] = v
 
 class Game:
     def __init__(self, player1, player2, record_turns=False):
@@ -242,7 +185,7 @@ class Game:
         self._field = Field(settings.board_size)
         self._record = record_turns
         if self._record:
-            self._field_storage = []
+            self.history = [[] for i in range(2)]
 
     def build_game_info(self):
         global settings
@@ -258,12 +201,9 @@ class Game:
     def notify_new_turn(self):
         for player_id in range(2):
             user_robot = self._players[player_id].get_robot()
-
-            if not hasattr(user_robot, 'on_new_turn'):
-                continue
-            if not inspect.ismethod(user_robot.on_new_turn):
-                continue
-            user_robot.on_new_turn()
+            if hasattr(user_robot, 'on_new_turn'):
+                if inspect.ismethod(user_robot.on_new_turn):
+                    user_robot.on_new_turn()
 
     def make_robots_act(self):
         global settings
@@ -273,23 +213,20 @@ class Game:
 
         for robot in self._robots:
             user_robot = self._players[robot.player_id].get_robot()
-
-            # copy properties
             for prop in settings.exposed_properties:
                 setattr(user_robot, prop, getattr(robot, prop))
 
-            # get next action
             try:
-                next_action = limit_execution_time(settings.max_usercode_time/1000, user_robot.act, game_info)
+                next_action = user_robot.act(game_info)
                 if not InternalRobot.is_valid_action(next_action):
-                    raise Exception
+                    raise Exception('%s is not a valid action' % str(next_action))
             except Exception:
                 print "The robot at (%s, %s) raised an exception:" % robot.location
-                print '-'*60
+                print '-' * 60
                 traceback.print_exc(file=sys.stdout)
-                print '-'*60
+                print '-' * 60
+                sys.exit(1)
                 next_action = ['guard']
-
             actions[robot] = next_action
 
         for robot, action in actions.iteritems():
@@ -329,16 +266,21 @@ class Game:
         to_remove = [x for x in self._robots if x.hp <= 0]
         for robot in to_remove:
             self._robots.remove(robot)
-            self._field[robot.location] = None
+            if self._field[robot.location] == robot:
+                self._field[robot.location] = None
 
-    def make_field_record(self):
-        record = [[], []]
-        for x in range(settings.board_size):
-            for y in range(settings.board_size):
-                loc = (x, y)
-                if self._field[loc] is not None:
-                    record[self._field[loc].player_id].append('%d,%d' %loc)
-        return '|'.join([' '.join(x) for x in record])
+    def make_history(self):
+        # indeed, let's hope this game does
+        global settings
+
+        robots = [[] for i in range(2)]
+        for robot in self._robots:
+            robot_info = []
+            for prop in settings.exposed_properties:
+                if prop != 'player_id':
+                    robot_info.append(getattr(robot, prop))
+            robots[robot.player_id].append(robot_info)
+        return robots
 
     def run_turn(self):
         global settings
@@ -352,102 +294,14 @@ class Game:
             self.spawn_robot_batch()
 
         if self._record:
-            self._field_storage.append(self.make_field_record())
+            round_history = self.make_history()
+            for i in (0, 1):
+                self.history[i].append(round_history[i])
 
         self.turns += 1
-
-    def get_game_history(self):
-        s = ';'.join(self._field_storage)
-        return base64.b64encode(zlib.compress(s, 9))
 
     def get_scores(self):
         scores = [0, 0]
         for robot in self._robots:
             scores[robot.player_id] += 1
         return scores
-
-class Render:
-    def __init__(self, game, block_size=30):
-        global settings
-
-        self._blocksize = block_size
-        self._winsize = block_size * settings.board_size + 40
-        self._game = game
-        self._colors = Field(settings.board_size)
-
-        self._master = Tkinter.Tk()
-        self._master.title('robot game')
-        self._win = Tkinter.Canvas(self._master, width=self._winsize, height=self._winsize + self._blocksize * 7/4)
-        self._win.pack()
-
-        self.prepare_backdrop(self._win)
-        self._label = self._win.create_text(self._blocksize/2, self._winsize + self._blocksize/2,
-            anchor='nw', font='TkFixedFont', fill='white')
-
-        self.callback()
-        self._win.mainloop()
-
-    def prepare_backdrop(self, win):
-        global settings
-
-        self._win.create_rectangle(0, 0, self._winsize, self._winsize + self._blocksize, fill='#555', width=0)
-        self._win.create_rectangle(0, self._winsize, self._winsize, self._winsize + self._blocksize * 7/4, fill='#333', width=0)
-        for x in range(settings.board_size):
-            for y in range(settings.board_size):
-                self._win.create_rectangle(
-                    x * self._blocksize + 21, y * self._blocksize + 21,
-                    x * self._blocksize + self._blocksize - 3 + 21, y * self._blocksize + self._blocksize - 3 + 21,
-                    fill='black',
-                    width=0)
-
-    def draw_square(self, loc, color):
-        if self._colors[loc] == color:
-            return
-
-        self._colors[loc] = color
-        x, y = loc
-        self._win.create_rectangle(x * self._blocksize + 20, y * self._blocksize + 20,
-            x * self._blocksize + self._blocksize - 3 + 20, y * self._blocksize + self._blocksize - 3 + 20,
-            fill=color, width=0)
-
-    def update_title(self, turns, max_turns):
-        red, green = self._game.get_scores()
-        self._win.itemconfig(self._label,
-            text='Red: %d | Green: %d | Turn: %d/%d' % (
-                red, green, turns, max_turns))
-
-    def callback(self):
-        global settings
-
-        self._game.run_turn()
-        self.paint()
-        self.update_title(self._game.turns, settings.max_turns)
-
-        if self._game.turns < settings.max_turns:
-            self._win.after(settings.turn_interval, self.callback)
-
-    def determine_color(self, loc):
-        global settings
-
-        if loc in settings.obstacles:
-            return '#222'
-            
-        robot = self._game.robot_at_loc(loc)
-        if robot is None:
-            return 'white'
-
-        ## healthy robot has 50 hp so max 15
-        colorhex = 5 + robot.hp / 5
-        
-        if robot.player_id == 0: # red
-            return '#%X00' % colorhex
-        else: # green
-            return '#0%X0' % colorhex
-
-    def paint(self):
-        global settings
-
-        for y in range(settings.board_size):
-            for x in range(settings.board_size):
-                loc = (x, y)
-                self.draw_square(loc, self.determine_color(loc))

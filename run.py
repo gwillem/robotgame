@@ -1,33 +1,22 @@
 import game
+import render
 import sys
-import codejail
+import os
 
-def create_player(player_id, fname):
-    return game.Player(player_id, open(fname).read())
+def make_player(fname):
+    return game.Player(open(fname).read())
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print 'usage: python run.py <usercode1.py> <usercode2.py> [<map file>]'
         sys.exit()
 
-    try: 
-        players = [create_player(i, x) for i, x in enumerate(sys.argv[1:3])]
-        g = game.Game(*players)
+    players = [make_player(x) for x in sys.argv[1:3]]
+    g = game.Game(*players)
 
-        map_name = 'maps/default.py'
-        if len(sys.argv) > 3:
-            map_name = sys.argv[3]
+    map_name = os.path.join(os.path.dirname(__file__), 'maps/default.py')
+    if len(sys.argv) > 3:
+        map_name = sys.argv[3]
 
-        game.load_map(map_name)
-
-        if '--render' in sys.argv:
-            game.Render(g)
-        else:
-            for i in range(game.settings.max_turns):
-                g.run_turn()
-            scores = g.get_scores()
-            print scores
-            print scores[1] - scores[0]
-
-    except codejail.SecurityError as e:
-        print 'security breach by player %d: %s' % (e.player_id, e.message)
+    game.init_settings(map_name)
+    render.Render(g, game.settings)

@@ -20,6 +20,8 @@ BUGS
 
 * self.adjacents is ugly
 
+* If stuck at spawn, go to other spawn
+
 """
 
 from collections import Counter
@@ -85,12 +87,13 @@ class ProposedMoveCollection(list):
     def eliminate(self, **kwargs):
         to_delete = []
     
+        ## delete items for which ALL kwargs hold true
+        
         for i, item in enumerate(self):
             ## do i need to delete this item?
-            for k, v in kwargs.items():
-                if getattr(item,k) == v:
-                    to_delete.append(i)
-                    break
+            rowmatch = all([getattr(item,k) == v for k, v in kwargs.items()])
+            if rowmatch:
+                to_delete.append(i)
 
         ## slit into separate code, because its tricky to manipulate a 
         ## list and iterate it at the same time
@@ -139,11 +142,14 @@ class Robot():
         
             print "plan: %s" % plan
             
-            self.history_plan[self.turn] = plan
-            
+            self.history_plan[self.turn] = plan            
+
             if hasattr(self,'breakpoint') and self.breakpoint:
                 raw_input("Press Enter to continue...")
                 self.breakpoint = False
+            else:
+               raw_input("Press Enter to continue...")
+
 
         plan = self.history_plan[self.turn]
 
@@ -197,11 +203,16 @@ class Robot():
         locs = self.adjacents(src, only_empty=True)
         
         # find locs with least amount of enemy neighbours
-        locs = [loc for loc in locs if self.count_enemy_neighbours_for_loc(loc=loc) == 0]
+        locs_safe = [loc for loc in locs if self.count_enemy_neighbours_for_loc(loc=loc) == 0]
         
-        if locs:
-            return ProposedMove(100, 'move', src, locs[0])
-        
+        if locs_safe:
+            return ProposedMove(100, 'move', src, locs_safe[0])
+            
+        # no safe locations.. should i run anyway?
+        if is_spawn(src) and locs:
+            return ProposedMove(90, 'move', src, locs[0])
+            
+        # there are no alternatives...
         raise CannotFlee("Can't flee! No safe locations")
         
     def attack_weakest_neighbour(self, src):

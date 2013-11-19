@@ -225,6 +225,7 @@ class Game:
                 print '-' * 60
                 traceback.print_exc(file=sys.stdout)
                 print '-' * 60
+                sys.exit(1)
                 next_action = ['guard']
             actions[robot] = next_action
 

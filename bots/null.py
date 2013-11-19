@@ -1,3 +1,12 @@
 class Robot():
     def act(self, game):
-        return ['suicide']
+        
+        #~ if not hasattr(self, 'banaan'):
+            #~ self.banaan = []
+            
+        #~ self.banaan.append(game['turn'])
+        
+        #~ print self.banaan
+        
+       return ['suicide']
+        #~ return ['guard']

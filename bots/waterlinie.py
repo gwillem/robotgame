@@ -11,9 +11,7 @@ Essence of this bot:
 
 BUGS
 
-* If many bots ATTACK the same location, that's fine! Should fix in 
-  _reduce_list_of_dicts, it should require ALL arguments to satisfy 
-  (dst=x && action=attack) 
+* Flee: don't go to spawn point
 
 * If a bot is locked AND at spawn point AND can't flee but also can't attack, then it 
   should run!
@@ -24,11 +22,20 @@ BUGS
 
 """
 
-from collections import Counter
+#from collections import Counter
+from collections import defaultdict
 import math
 import sys
 import time
 import rg
+import os
+
+DEBUG=os.getenv('USER') == 'willem'
+
+def log(msg):
+    if DEBUG:
+        return
+        print msg
 
 class ProposedMove(object):
     
@@ -66,7 +73,8 @@ class ProposedMoveCollection(list):
     def find_singles(self):
         """Return proposed moves for bots that have only a single proposal"""
         sources = [p.src for p in self]
-        bots_with_single_prop = [ x[0] for x in Counter( sources ).items() if x[1] == 1]
+        bots_with_single_prop = [ x[0] for x in unique_c(sources) if x[1] == 1]
+#        bots_with_single_prop = [ x[0] for x in Counter( sources ).items() if x[1] == 1]
         
         return [p for p in self if p.src in bots_with_single_prop]
        
@@ -109,7 +117,14 @@ def center_angle(loc, center=None):
     dx = loc[0] - center[0]
     dy = loc[1] - center[1]
     return math.atan2(dy, dx) 
-               
+
+def unique_c(mylist):
+    c = defaultdict(int)
+    for x in mylist:
+        c[x] += 1
+        
+    return c
+
 class Robot():
         
     def act(self, game):
@@ -127,28 +142,25 @@ class Robot():
             """ Only do this for the first bot in a turn.
             They all share the same object, so skip redundant calculations """
 
-            print 
-            print 
-            print 
-            print "********** turn %d *********" % game['turn']
+            log( "********** turn %d *********" % game['turn'] )
 
             self.history_arena[self.turn] = self.robots
 
             proposals = self.collect_all_proposals()
             
-            print "proposals:\n%s" % proposals
+            log( "proposals:\n%s" % proposals )
             
             plan = self.proposals_to_plan(proposals)
         
-            print "plan: %s" % plan
+            log( "plan: %s" % plan )
             
             self.history_plan[self.turn] = plan            
 
-            if hasattr(self,'breakpoint') and self.breakpoint:
-                raw_input("Press Enter to continue...")
-                self.breakpoint = False
-            else:
-               raw_input("Press Enter to continue...")
+            #~ if hasattr(self,'breakpoint') and self.breakpoint:
+                #~ raw_input("Press Enter to continue...")
+                #~ self.breakpoint = False
+            #~ else:
+               #~ raw_input("Press Enter to continue...")
 
 
         plan = self.history_plan[self.turn]
@@ -203,7 +215,7 @@ class Robot():
         locs = self.adjacents(src, only_empty=True)
         
         # find locs with least amount of enemy neighbours
-        locs_safe = [loc for loc in locs if self.count_enemy_neighbours_for_loc(loc=loc) == 0]
+        locs_safe = [loc for loc in locs if self.count_enemy_neighbours_for_loc(loc=loc) == 0 and not is_spawn(loc)]
         
         if locs_safe:
             return ProposedMove(100, 'move', src, locs_safe[0])
@@ -396,7 +408,13 @@ class TestRobot(object):
         pmc.eliminate(action='move')
         assert len(pmc) == 0, pmc
 
-        
+class TestHelperFunctions(object):
+    def test_unique_c(self):
+        mylist = "a b a c b d e c a".split()
+        rv = unique_c(mylist)
+        assert rv['a'] == 3, rv
+        assert rv['d'] == 1, rv
+
 class NoBotFound(Exception):
     pass
 

@@ -30,11 +30,10 @@ import time
 import rg
 import os
 
-DEBUG=os.getenv('USER') == 'willem'
+DEBUG=True # os.getenv('USER') == 'willem'
 
 def log(msg):
     if DEBUG:
-        return
         print msg
 
 class ProposedMove(object):
@@ -131,6 +130,15 @@ class Robot():
         
         self.robots = game['robots']
         self.turn   = game['turn']
+
+
+        if self.location not in self.robots:
+            raise Exception("self.location %s is not in game['robots']: %s" %\
+             (self.location, self.robots))
+
+        if self.robots[self.location]['player_id'] != self.player_id:
+            raise Exception("self.player_id (%s) doesn't match game['robots'][loc]['player_id'] (%s)" \
+                % (self.player_id, self.robots[self.location]['player_id'] ) )
                 
         if not hasattr(self, 'history_arena'):
             self.history_arena = {}
@@ -166,7 +174,7 @@ class Robot():
         plan = self.history_plan[self.turn]
 
         if self.location not in plan:
-            print "Ouch! Fatal error! I couldn't find myself %s in the plan" % (self.location,)
+            print "Ouch! Fatal error! I couldn't find myself %s in the plan: %s" % (self.location, game)
             raise Exception("My plan calculation is flawed, as I couldn't find myself")
         
         return plan[self.location]
@@ -358,7 +366,9 @@ class Robot():
                 
             for p in execute_proposals:
                 proposals.eliminate(src=p.src)
-                proposals.eliminate(dst=p.dst)
+                
+                ## if moving, we should block this dst from happening again
+                proposals.eliminate(dst=p.dst, action='move')
 
                 ## maintain master list of final moves
                 moves.append(p)
@@ -407,6 +417,24 @@ class TestRobot(object):
         
         pmc.eliminate(action='move')
         assert len(pmc) == 0, pmc
+        
+    def test_act(self):
+        
+        import game
+        game.init_settings('maps/default.py')
+        
+        robot = Robot()
+        robot.hp = 50
+        robot.player_id = 0
+        robot.location = (3,4)
+        
+        game = {'turn': 12, 'robots': {(15, 12): {'player_id': 1, 'hp': 50, 'location': (15, 12)}, (15, 13): {'player_id': 1, 'hp': 41, 'location': (15, 13)}, (13, 2): {'player_id': 0, 'hp': 50, 'location': (13, 2)}, (8, 2): {'player_id': 1, 'hp': 50, 'location': (8, 2)}, (12, 12): {'player_id': 1, 'hp': 50, 'location': (12, 12)}, (12, 6): {'player_id': 1, 'hp': 50, 'location': (12, 6)}, (12, 5): {'player_id': 1, 'hp': 50, 'location': (12, 5)}, (13, 7): {'player_id': 1, 'hp': 50, 'location': (13, 7)}, (7, 16): {'player_id': 0, 'hp': 50, 'location': (7, 16)}, (2, 12): {'player_id': 0, 'hp': 50, 'location': (2, 12)}, (3, 6): {'player_id': 1, 'hp': 50, 'location': (3, 6)}, (6, 12): {'player_id': 1, 'hp': 50, 'location': (6, 12)}, (15, 14): {'player_id': 0, 'hp': 50, 'location': (15, 14)}, (3, 4): {'player_id': 0, 'hp': 50, 'location': (3, 4)}, (4, 4): {'player_id': 1, 'hp': 50, 'location': (4, 4)}, (9, 17): {'player_id': 0, 'hp': 50, 'location': (9, 17)}}}
+        
+        rv = robot.act(game)
+
+        assert rv == ['guard'], ("act is %s instead of guard" % rv)
+        
+        
 
 class TestHelperFunctions(object):
     def test_unique_c(self):

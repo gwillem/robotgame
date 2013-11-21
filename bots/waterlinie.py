@@ -22,38 +22,6 @@ TODO
 
 * If stuck at spawn, go to other spawn
 
-Err report when i propose for enemy bots:
-
-0.0 (367): UPDATE matches SET state = 1 WHERE id=89306
-=========================== running turn 1 ===========================
-=========================== running turn 2 ===========================
->> ********** turn 1 *********
->> player_id: 0, hp: 50, location: (12, 16)
->> I received game data: {'turn': 1, 'robots': {(13, 2): {'player_id': 1, 'hp': 50, 'location': (13, 2)}, (17, 7): {'player_id': 0, 'hp': 50, 'location': (17, 7)}, (12, 16): {'player_id': 0, 'hp': 50, 'location': (12, 16)}, (13, 16): {'player_id': 0, 'hp': 50, 'location': (13, 16)}, (1, 10): {'player_id': 1, 'hp': 50, 'location': (1, 10)}, (1, 8): {'player_id': 1, 'hp': 50, 'location': (1, 8)}, (8, 17): {'player_id': 0, 'hp': 50, 'location': (8, 17)}, (15, 4): {'player_id': 1, 'hp': 50, 'location': (15, 4)}, (14, 3): {'player_id': 1, 'hp': 50, 'location': (14, 3)}, (3, 14): {'player_id': 0, 'hp': 50, 'location': (3, 14)}}}
->> proposals:
-  0.  (13, 2) >  (13, 2),  guard, (p: 50)
-  1.  (13, 2) >  (13, 3), attack, (p:100)
-  2.  (17, 7) >  (17, 7),  guard, (p: 50)
-  3.  (17, 7) >  (17, 8), attack, (p:100)
-  4. (12, 16) > (12, 16),  guard, (p: 50)
-  5. (12, 16) > (12, 15),   move, (p: 90)
-  6. (13, 16) > (13, 16),  guard, (p: 50)
-  7. (13, 16) > (13, 15),   move, (p: 90)
-  8.  (1, 10) >  (1, 10),  guard, (p: 50)
-  9.  (1, 10) >   (1, 9), attack, (p:100)
- 10.   (1, 8) >   (1, 8),  guard, (p: 50)
- 11.   (1, 8) >   (1, 9), attack, (p:100)
- 12.  (8, 17) >  (8, 17),  guard, (p: 50)
- 13.  (8, 17) >  (9, 17), attack, (p:100)
- 14.  (15, 4) >  (15, 4),  guard, (p: 50)
- 15.  (15, 4) >  (15, 3), attack, (p:100)
- 16.  (14, 3) >  (14, 3),  guard, (p: 50)
- 17.  (14, 3) >  (14, 4), attack, (p:100)
- 18.  (3, 14) >  (3, 14),  guard, (p: 50)
- 19.  (3, 14) >  (3, 15), attack, (p:100)
- 
- 
-
 """
 
 #from collections import Counter
@@ -165,6 +133,7 @@ class Robot():
         self.robots = game['robots']
         self.turn   = game['turn']
 
+        self.enemy_id = abs(self.player_id-1)
 
         if self.location not in self.robots:
             raise Exception("self.location %s is not in game['robots']: %s" %\
@@ -217,6 +186,27 @@ class Robot():
         
         return plan[self.location]
         
+        
+    def count_neighbours(self, **kwargs):
+        return len(self.find_neighbours(**kwargs))
+        
+    def find_neighbours(self, src=None, player_id=None):
+        if src == None:
+            src = self.location
+            
+        locs = rg.locs_around(src, filter_out=('invalid', 'obstacle'))
+            
+        if player_id == None:
+            neighbours = [loc for loc in locs if loc in self.robots]
+        else:
+            neighbours = [loc for loc in locs if loc in self.robots if loc in self.robots and self.robots[loc]['player_id'] == player_id]
+    
+        if neighbours:
+            neighbours.sort(key = lambda x: self.robots[x]['hp'])
+            
+        return neighbours
+        
+    ## todo: fix me!
     def adjacents(self, location=None, filter_id=None, filter_empty=False, only_empty=False, only_id=False):
         if location == None:
             location = self.location
@@ -286,6 +276,7 @@ class Robot():
     def find_preemptive_strike(self, src):
         ## which neighbour has most enemy neighbours?
         neighbours = self.adjacents(src, only_empty=True)
+        # self.count_neighbours(src=src, player_id=self.enemy_id)
         neighbours = [(n,self.count_enemy_neighbours_for_loc(loc=n)) for n in neighbours]
         neighbours.sort(key = lambda x: x[1], reverse=True)
         
@@ -303,7 +294,9 @@ class Robot():
         ## stand still is also valid
         proposals.add_move(50, 'guard', src)
         
-        now_surrounded = self.count_enemy_neighbours_for_loc(loc=src)
+        ## todo: rewrite to find_neighbours
+        now_surrounded = self.count_neighbours(src=src, player_id=self.enemy_id)
+#        now_surrounded = self.count_enemy_neighbours_for_loc(loc=src)
         preemptive_strike = self.find_preemptive_strike(src)
         
         
@@ -416,15 +409,18 @@ class Robot():
         # moves is a list of proposals, need to transform to api-compatible format
         return moves.to_plan()
 
+    ## todo: rewrite to count_neighbours
     def count_enemy_neighbours_for_loc(self, **kwargs):
         return len(self.enemy_neighbours_for_loc(**kwargs))
             
+    ## todo: rewrite to count_neighbours    
     def count_peer_neighbours_for_loc(self, loc, own_id=None):
         if own_id == None:
             own_id = self.player_id
         
         return len(self.adjacents(loc, only_id=own_id))
 
+    ## todo: rewrite to find
     def enemy_neighbours_for_loc(self, loc=None, own_id=None):
         if loc == None:
             loc = self.location
@@ -433,10 +429,11 @@ class Robot():
             own_id = self.player_id
         
         neighbours = self.adjacents(loc, filter_empty=True, filter_id=own_id)
-        
+                
         ## lowest hitpoint first
-        neighbours.sort(key = lambda x: self.robots[x]['hp'])
-        
+        if neighbours: 
+            neighbours.sort(key = lambda x: self.robots[x]['hp'])
+
         #~ print "%s : %s enemy neighbours" % (loc, neighbours)
         
         return neighbours

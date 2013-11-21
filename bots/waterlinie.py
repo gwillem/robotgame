@@ -9,7 +9,9 @@ Essence of this bot:
 3. Execute plan for this.robot
 4. Profit!
 
-BUGS
+TODO
+
+* If enemy neighbour is surrounded by >1 ally, then attack. 
 
 * Flee: don't go to spawn point
 
@@ -19,6 +21,38 @@ BUGS
 * self.adjacents is ugly
 
 * If stuck at spawn, go to other spawn
+
+Err report when i propose for enemy bots:
+
+0.0 (367): UPDATE matches SET state = 1 WHERE id=89306
+=========================== running turn 1 ===========================
+=========================== running turn 2 ===========================
+>> ********** turn 1 *********
+>> player_id: 0, hp: 50, location: (12, 16)
+>> I received game data: {'turn': 1, 'robots': {(13, 2): {'player_id': 1, 'hp': 50, 'location': (13, 2)}, (17, 7): {'player_id': 0, 'hp': 50, 'location': (17, 7)}, (12, 16): {'player_id': 0, 'hp': 50, 'location': (12, 16)}, (13, 16): {'player_id': 0, 'hp': 50, 'location': (13, 16)}, (1, 10): {'player_id': 1, 'hp': 50, 'location': (1, 10)}, (1, 8): {'player_id': 1, 'hp': 50, 'location': (1, 8)}, (8, 17): {'player_id': 0, 'hp': 50, 'location': (8, 17)}, (15, 4): {'player_id': 1, 'hp': 50, 'location': (15, 4)}, (14, 3): {'player_id': 1, 'hp': 50, 'location': (14, 3)}, (3, 14): {'player_id': 0, 'hp': 50, 'location': (3, 14)}}}
+>> proposals:
+  0.  (13, 2) >  (13, 2),  guard, (p: 50)
+  1.  (13, 2) >  (13, 3), attack, (p:100)
+  2.  (17, 7) >  (17, 7),  guard, (p: 50)
+  3.  (17, 7) >  (17, 8), attack, (p:100)
+  4. (12, 16) > (12, 16),  guard, (p: 50)
+  5. (12, 16) > (12, 15),   move, (p: 90)
+  6. (13, 16) > (13, 16),  guard, (p: 50)
+  7. (13, 16) > (13, 15),   move, (p: 90)
+  8.  (1, 10) >  (1, 10),  guard, (p: 50)
+  9.  (1, 10) >   (1, 9), attack, (p:100)
+ 10.   (1, 8) >   (1, 8),  guard, (p: 50)
+ 11.   (1, 8) >   (1, 9), attack, (p:100)
+ 12.  (8, 17) >  (8, 17),  guard, (p: 50)
+ 13.  (8, 17) >  (9, 17), attack, (p:100)
+ 14.  (15, 4) >  (15, 4),  guard, (p: 50)
+ 15.  (15, 4) >  (15, 3), attack, (p:100)
+ 16.  (14, 3) >  (14, 3),  guard, (p: 50)
+ 17.  (14, 3) >  (14, 4), attack, (p:100)
+ 18.  (3, 14) >  (3, 14),  guard, (p: 50)
+ 19.  (3, 14) >  (3, 15), attack, (p:100)
+ 
+ 
 
 """
 
@@ -34,12 +68,12 @@ DEBUG=True # os.getenv('USER') == 'willem'
 
 def log(msg):
     if DEBUG:
-        print msg
+        print ">> %s" % msg
 
 class ProposedMove(object):
     
     def __init__(self, prio, action, src, dst=None):
-        if not dst:
+        if dst == None:
             dst = src
             
         self.prio = prio
@@ -111,7 +145,7 @@ def is_spawn(loc):
     return 'spawn' in rg.loc_types(loc)
 
 def center_angle(loc, center=None):
-    if not center:
+    if center == None:
         center = rg.CENTER_POINT
     dx = loc[0] - center[0]
     dy = loc[1] - center[1]
@@ -151,6 +185,10 @@ class Robot():
             They all share the same object, so skip redundant calculations """
 
             log( "********** turn %d *********" % game['turn'] )
+            
+            log ("player_id: %s, hp: %s, location: %s" % (self.player_id, self.hp, self.location,))
+
+            log( "I received game data: %s" % game )
 
             self.history_arena[self.turn] = self.robots
 
@@ -180,29 +218,31 @@ class Robot():
         return plan[self.location]
         
     def adjacents(self, location=None, filter_id=None, filter_empty=False, only_empty=False, only_id=False):
-        if not location:
+        if location == None:
             location = self.location
             
         locs = rg.locs_around(location, filter_out=('invalid', 'obstacle'))
                     
-        if only_empty:
+        if only_empty != None:
             return [loc for loc in locs if loc not in self.robots]
             
-        if only_id:
+        if only_id != None:
             return [loc for loc in locs if loc in self.robots and self.robots[loc]['player_id'] == only_id]
                     
-        if filter_empty:
+        if filter_empty != None:
             locs = [loc for loc in locs if loc in self.robots]
             
-        if filter_id:
+        if filter_id != None:
             locs = [loc for loc in locs if loc not in self.robots \
                 or self.robots[loc]['player_id'] != filter_id]
         
         return locs
 
     def find_all_bots(self, player_id=None):
-        
-        if player_id:
+
+        #~ print "player id is %s" % player_id
+    
+        if player_id != None:
             return [loc for loc in self.robots if self.robots[loc]['player_id'] == player_id]
         else:
             return [loc for loc in self.robots]    
@@ -380,16 +420,16 @@ class Robot():
         return len(self.enemy_neighbours_for_loc(**kwargs))
             
     def count_peer_neighbours_for_loc(self, loc, own_id=None):
-        if not own_id:
+        if own_id == None:
             own_id = self.player_id
         
         return len(self.adjacents(loc, only_id=own_id))
 
     def enemy_neighbours_for_loc(self, loc=None, own_id=None):
-        if not loc:
+        if loc == None:
             loc = self.location
         
-        if not own_id:
+        if own_id == None:
             own_id = self.player_id
         
         neighbours = self.adjacents(loc, filter_empty=True, filter_id=own_id)
@@ -418,23 +458,46 @@ class TestRobot(object):
         pmc.eliminate(action='move')
         assert len(pmc) == 0, pmc
         
-    def test_act(self):
+    #~ def test_act_A(self):
+        #~ 
+        #~ import game
+        #~ game.init_settings('maps/default.py')
+        #~ 
+        #~ robot = Robot()
+        #~ robot.hp = 50
+        #~ robot.player_id = 0
+        #~ robot.location = (3,4)
+        #~ 
+        #~ game = {'turn': 12, 'robots': {(15, 12): {'player_id': 1, 'hp': 50, 'location': (15, 12)}, (15, 13): {'player_id': 1, 'hp': 41, 'location': (15, 13)}, (13, 2): {'player_id': 0, 'hp': 50, 'location': (13, 2)}, (8, 2): {'player_id': 1, 'hp': 50, 'location': (8, 2)}, (12, 12): {'player_id': 1, 'hp': 50, 'location': (12, 12)}, (12, 6): {'player_id': 1, 'hp': 50, 'location': (12, 6)}, (12, 5): {'player_id': 1, 'hp': 50, 'location': (12, 5)}, (13, 7): {'player_id': 1, 'hp': 50, 'location': (13, 7)}, (7, 16): {'player_id': 0, 'hp': 50, 'location': (7, 16)}, (2, 12): {'player_id': 0, 'hp': 50, 'location': (2, 12)}, (3, 6): {'player_id': 1, 'hp': 50, 'location': (3, 6)}, (6, 12): {'player_id': 1, 'hp': 50, 'location': (6, 12)}, (15, 14): {'player_id': 0, 'hp': 50, 'location': (15, 14)}, (3, 4): {'player_id': 0, 'hp': 50, 'location': (3, 4)}, (4, 4): {'player_id': 1, 'hp': 50, 'location': (4, 4)}, (9, 17): {'player_id': 0, 'hp': 50, 'location': (9, 17)}}}
+        #~ 
+        #~ rv = robot.act(game)
+#~ 
+        #~ assert rv == ['guard'], ("act is %s instead of guard" % rv)
         
+    def test_find_all_bots(self):
+
         import game
         game.init_settings('maps/default.py')
-        
+
         robot = Robot()
         robot.hp = 50
         robot.player_id = 0
-        robot.location = (3,4)
-        
-        game = {'turn': 12, 'robots': {(15, 12): {'player_id': 1, 'hp': 50, 'location': (15, 12)}, (15, 13): {'player_id': 1, 'hp': 41, 'location': (15, 13)}, (13, 2): {'player_id': 0, 'hp': 50, 'location': (13, 2)}, (8, 2): {'player_id': 1, 'hp': 50, 'location': (8, 2)}, (12, 12): {'player_id': 1, 'hp': 50, 'location': (12, 12)}, (12, 6): {'player_id': 1, 'hp': 50, 'location': (12, 6)}, (12, 5): {'player_id': 1, 'hp': 50, 'location': (12, 5)}, (13, 7): {'player_id': 1, 'hp': 50, 'location': (13, 7)}, (7, 16): {'player_id': 0, 'hp': 50, 'location': (7, 16)}, (2, 12): {'player_id': 0, 'hp': 50, 'location': (2, 12)}, (3, 6): {'player_id': 1, 'hp': 50, 'location': (3, 6)}, (6, 12): {'player_id': 1, 'hp': 50, 'location': (6, 12)}, (15, 14): {'player_id': 0, 'hp': 50, 'location': (15, 14)}, (3, 4): {'player_id': 0, 'hp': 50, 'location': (3, 4)}, (4, 4): {'player_id': 1, 'hp': 50, 'location': (4, 4)}, (9, 17): {'player_id': 0, 'hp': 50, 'location': (9, 17)}}}
-        
-        rv = robot.act(game)
+        robot.location = (12,16)
 
-        assert rv == ['guard'], ("act is %s instead of guard" % rv)
+        game = {'turn': 1, 'robots': {(13, 2): {'player_id': 1, 'hp': 50, 'location': (13, 2)}, (17, 7): {'player_id': 0, 'hp': 50, 'location': (17, 7)}, (12, 16): {'player_id': 0, 'hp': 50, 'location': (12, 16)}, (13, 16): {'player_id': 0, 'hp': 50, 'location': (13, 16)}, (1, 10): {'player_id': 1, 'hp': 50, 'location': (1, 10)}, (1, 8): {'player_id': 1, 'hp': 50, 'location': (1, 8)}, (8, 17): {'player_id': 0, 'hp': 50, 'location': (8, 17)}, (15, 4): {'player_id': 1, 'hp': 50, 'location': (15, 4)}, (14, 3): {'player_id': 1, 'hp': 50, 'location': (14, 3)}, (3, 14): {'player_id': 0, 'hp': 50, 'location': (3, 14)}}}
+        #~ rv = robot.act(game)
+
+        robot.robots = game['robots']
+        
+        print robot.find_all_bots(0)
+        
+        assert len(robot.find_all_bots(0)) == 5
+        assert len(robot.find_all_bots(1)) == 5
+        assert len(robot.find_all_bots(2)) == 0
         
         
+#        rv = robot.act(game)
+    
 
 class TestHelperFunctions(object):
     def test_unique_c(self):

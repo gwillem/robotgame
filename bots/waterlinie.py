@@ -294,9 +294,16 @@ class Robot():
         ## stand still is also valid
         proposals.add_move(50, 'guard', src)
         
-        now_surrounded = self.count_neighbours(src=src, player_id=self.enemy_id)
+        nearby_enemies = self.find_neighbours(src=src, player_id=self.enemy_id)
         preemptive_strike = self.find_preemptive_strike(src)
         
+        if nearby_enemies:
+            # yields (loc, num_allies_surrounded, hp) tuples
+            overwhelmed_enemies = [(x,self.count_neighbours(src=x,player_id=self.enemy_id),self.robots[x]['hp']) \
+                for x in nearby_enemies if self.count_neighbours(src=x,player_id=self.player_id) > 1]
+
+            overwhelmed_enemies.sort(key=lambda x: (x[1], x[2]), reverse=True)
+
         
         """ Pseudo code:
         
@@ -315,16 +322,17 @@ class Robot():
         
         #~ print "%s : preemptive strike: %s" % (src,preemptive_strike)
         
-        if now_surrounded:
+        if nearby_enemies and overwhelmed_enemies:
+            proposals.add_move(110,'attack',src,overwhelmed_enemies[0][0])
+
+        elif nearby_enemies:
             try:
-                #~ print "%s : Trying to flee" % (src,)
                 proposals.append(self.try_to_flee(src))
             except CannotFlee:
                 #~ print "%s : Can't flee, will attack weakest neighbour" % (src,)
                 proposals.append(self.attack_weakest_neighbour(src))
                 
         elif preemptive_strike: ## todo: predict enemy movement based on previous steps
-            #~ self.breakpoint = True
             proposals.append(preemptive_strike)
                     
         else: ## sort possible moves
@@ -410,7 +418,7 @@ class Robot():
 class TestRobot(unittest.TestCase):
 
     @staticmethod
-    def create_fake_game(allies,enemies):
+    def create_fake_game(allies,enemies,turn=1):
         
         robots = {}
         for x in allies:
@@ -421,17 +429,32 @@ class TestRobot(unittest.TestCase):
             y = {'player_id': 1, 'hp': 50, 'location': x}
             robots[x] = y
 
-        return { 'turn' : 1, 'robots' : robots }
+        return { 'turn' : turn, 'robots' : robots }
     
     def setUp(self):
         import game
         game.init_settings('maps/default.py')
+        
         robot = Robot()
         robot.hp = 50
         robot.player_id = 0
         robot.enemy_id = 1
         robot.location = (3,4)
+        
         self.robot = robot
+    
+    def test_attack_if_we_are_more(self):
+        
+        a = [(9,9),(10,10)]
+        e = [(10,9)]
+    
+        self.robot.location = (9,9)
+        
+        game = self.create_fake_game(a,e)
+        
+        rv = self.robot.act(self.create_fake_game(a,e))
+        assert rv == ['attack',(10,9)], rv
+        
     
     def test_attack_weakest_neighbour(self):
         a = [(9,9),]
@@ -498,11 +521,7 @@ class TestRobot(unittest.TestCase):
     def test_find_all_bots(self):
 
         game = {'turn': 1, 'robots': {(13, 2): {'player_id': 1, 'hp': 50, 'location': (13, 2)}, (17, 7): {'player_id': 0, 'hp': 50, 'location': (17, 7)}, (12, 16): {'player_id': 0, 'hp': 50, 'location': (12, 16)}, (13, 16): {'player_id': 0, 'hp': 50, 'location': (13, 16)}, (1, 10): {'player_id': 1, 'hp': 50, 'location': (1, 10)}, (1, 8): {'player_id': 1, 'hp': 50, 'location': (1, 8)}, (8, 17): {'player_id': 0, 'hp': 50, 'location': (8, 17)}, (15, 4): {'player_id': 1, 'hp': 50, 'location': (15, 4)}, (14, 3): {'player_id': 1, 'hp': 50, 'location': (14, 3)}, (3, 14): {'player_id': 0, 'hp': 50, 'location': (3, 14)}}}
-        #~ rv = robot.act(game)
-
         self.robot.robots = game['robots']
-        
-        #~ print self.robot.find_all_bots(0)
         
         assert len(self.robot.find_all_bots(0)) == 5
         assert len(self.robot.find_all_bots(1)) == 5

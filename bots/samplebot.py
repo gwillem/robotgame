@@ -1,36 +1,58 @@
-import math
-import random
-import pprint
-
-CENTER = (9, 9)
-
-def distance(loc1, loc2):
-  return abs(loc1[0] - loc2[0]) + abs(loc1[1] - loc2[1])
-
-def center_distance(loc):
-  return distance(loc, CENTER)
+import rg
+import ast
+import game as rgkit_game
+import unittest
 
 class Robot:
-  def adjacents(self):
-    return ((self.location[0], self.location[1] + 1),
-            (self.location[0], self.location[1] - 1),
-            (self.location[0] + 1, self.location[1]),
-            (self.location[0] - 1, self.location[1]))
+    def act(self, game):
+        # if we're in the center, stay put
+        if self.location == rg.CENTER_POINT:
+            return ['guard']
 
-  def act(self, game):
-    robots = game['robots']
-    locs = self.adjacents()
-    
-    # no squares with our bots. enemy bots are fine, we kill them
-    locs = [loc for loc in locs if (not robots.get(loc) or (robots.get(loc)['player_id'] != self.player_id))]
-    
-    # only squares closer to the center
-    locs = [loc for loc in locs if center_distance(loc) < center_distance(self.location)]
-    
-    if locs:
-      loc = random.choice(locs)
-      if game.get(loc):
-        return ['attack', loc]
-      return ['move', loc]
-    
-    return ['guard']
+        # if there are enemies around, attack them
+        for loc, bot in game['robots'].items():
+            if bot['player_id'] != self.player_id:
+                if rg.dist(loc, self.location) <= 1:
+                    return ['attack', loc]
+
+        # move toward the center
+        return ['move', rg.toward(self.location, rg.CENTER_POINT)]
+        
+class TestRobot(unittest.TestCase):
+
+    @staticmethod
+    def create_fake_game(allies,enemies,turn=1):
+        
+        robots = {}
+        for x in allies:
+            y = {'player_id': 0, 'hp': 50, 'location': x}
+            robots[x] = y
+
+        for x in enemies:
+            y = {'player_id': 1, 'hp': 50, 'location': x}
+            robots[x] = y
+
+        return { 'turn' : turn, 'robots' : robots }
+
+    def setUp(self):
+        map_data = ast.literal_eval(open('maps/default.py').read())
+        rgkit_game.init_settings(map_data)
+        
+        robot = Robot()
+        robot.hp = 50
+        robot.player_id = 0
+        robot.enemy_id = 1
+        
+        self.robot = robot
+        
+    def test_act_move_to_center(self):
+              
+        allies = [(8,9)]
+        enemies = [(3,3)]              
+        testgame = self.create_fake_game(allies,enemies)
+
+        self.robot.location = (8,9)
+               
+        rv = self.robot.act(testgame)
+        assert rv == ['move',(9,9)], rv
+        

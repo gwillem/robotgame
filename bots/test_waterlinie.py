@@ -5,7 +5,7 @@ import waterlinie as wl
 class TestRobot(unittest.TestCase):
 
     @staticmethod
-    def create_fake_game(allies,enemies,turn=1):
+    def create_fake_game(allies,enemies,turn=10):
         
         robots = {}
         for x in allies:
@@ -44,7 +44,7 @@ class TestRobot(unittest.TestCase):
         self.robot.history_arena[2] = game['robots']
         self.robot.turn = 2        
         
-        assert self.robot.is_static((9,9)) == True
+        #~ assert self.robot.is_static((9,9)) == True
 
         game = self.create_fake_game([],[(10,9)])
         self.robot.history_arena[3] = game['robots']
@@ -144,11 +144,26 @@ class TestRobot(unittest.TestCase):
         assert self.robot.is_vulnerable((3,4)) == False
         assert self.robot.is_vulnerable((5,4)) == True
         
-    def test_find_best_attack_spots(self):
-        a = [(8,8),(10,8),(8,10),(10,10),]
+        a = [(8,8),(8,9),(10,9),]
         e = [(9,9),]
         game = self.create_fake_game(a,e)
         self.robot.robots = game['robots']
+        assert self.robot.is_vulnerable((9,9)) == True
+        
+        
+    def test_find_best_attack_spots(self):
+        a = [(8,8),(10,8),(8,10),(10,10),]
+        e = [(9,9),]
+        
+        game = self.create_fake_game(a,e)
+        
+        self.robot.location = (8,8)
+        game['turn'] = 10
+        rv = self.robot.act(game)
+
+        self.robot.location = (8,8)
+        game['turn'] = 11
+        rv = self.robot.act(game)
         
         locs = sorted(self.robot.find_best_attack_spots())
         
@@ -163,6 +178,10 @@ class TestRobot(unittest.TestCase):
         vuln = sorted(self.robot.find_vuln_enemies())
         
         assert vuln== [(5,4),(9,9)], vuln
+        
+        
+        
+        
         
     def test_count_find_neighbours(self):
         a = [(9,9),(9,8),(9,10),]
@@ -180,10 +199,15 @@ class TestRobot(unittest.TestCase):
         game = self.create_fake_game(a,e)
         
         self.robot.location = (8,8)
+
+        game['turn'] = 1
         self.robot.act(game)
-        #~ self.robot.robots = game['robots']
+        
+        game['turn'] = 2
+        self.robot.act(game)
         
         enemies_assigned, ally_assignments = self.robot.assign_enemies()
+        
         assert (8,8) in enemies_assigned[(9,9)], enemies_assigned
         assert (10,9) in enemies_assigned[(9,9)], enemies_assigned
         assert ally_assignments[(8,8)] == (9,9), ally_assignments
@@ -191,15 +215,15 @@ class TestRobot(unittest.TestCase):
     def test_move_to_best_attack_spot(self):
         a = [(8,8),(10,8)]
         e = [(9,9),]
-        
         game = self.create_fake_game(a,e)
+        
         self.robot.location = (8,8)
-        
-        ## run extra time, to build history
+        game['turn'] = 10
         rv = self.robot.act(game)
         
+        game['turn'] = 11
+        rv = self.robot.act(game)
 
-        rv = self.robot.act(game)
         assert rv[0] == 'move', rv
         assert rv[1] in [(8,9),(9,8)], rv
 

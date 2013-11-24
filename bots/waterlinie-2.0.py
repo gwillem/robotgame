@@ -6,11 +6,11 @@ import os
 import time
 
 """
-See waterlinie.md for strategy elaboration TEST
+See waterlinie.md for strategy elaboration 
 """
 
-
-DEBUG=False # os.getenv('USER') == 'willem'
+DEBUG = True # os.getenv('USER') == 'willem'
+LOCAL = os.getenv('USER') == 'willem'
 
 def print_timing(func):
     def wrapper(*arg):
@@ -138,8 +138,9 @@ class Robot():
             They all share the same object, so skip redundant calculations """
 
             log( "********** turn %d *********" % game['turn'] )
-            log ("player_id: %s, hp: %s, location: %s" % (self.player_id, self.hp, self.location,))
-            log( "I received game data: %s" % game )
+            if not LOCAL:
+                log ("player_id: %s, hp: %s, location: %s" % (self.player_id, self.hp, self.location,))
+                log( "I received game data: %s" % game )
 
             self.history_arena[self.turn] = self.robots
 
@@ -186,7 +187,8 @@ class Robot():
         
         enemies_assigned = defaultdict(list)
 
-        #~ print "available for duty: %s" % available_for_duty
+        log( "available for duty: %s" % available_for_duty )
+        log( "enemies: %s" % enemies )
 
         # search 1 and 2 wdist deep
         for wdist in [1, 2]:
@@ -217,23 +219,28 @@ class Robot():
         """Has given bot moved in the last turn?
         Its a heuristic, as there is no id of enemy bots, only location"""
                    
-        if not hasattr(self,'history_arena'): # testing mode
+        if not hasattr(self,'turn'):
             return True
+                   
+        if not hasattr(self,'history_arena'):
+            return True if self.turn > 1 else False
                    
         pid = self.history_arena[self.turn][src]['player_id']
         last_turn = self.turn - 1
     
         try:
-            if self.history_arena[last_turn][src]['player_id'] == pid:
-                return True
+            if self.history_arena[last_turn][src]['player_id'] != pid:
+                return False
         except KeyError:
-            pass
+            return False
                     
-        return False
+        return True
         
     def is_vulnerable(self, src):
         """Does this bot have at least 2 safe attack neighbours?
         and is it static?"""
+        
+        
         
         if not self.is_static(src):
             return False
@@ -380,9 +387,9 @@ class Robot():
 
     def find_vuln_enemies(self):
         """Scan arena for vuln enemies"""
-        enemies = self.find_all_bots(player_id=self.enemy_id)
+        enemies = self.find_all_bots(player_id=self.enemy_id)      
         enemies = [x for x in enemies if self.is_vulnerable(x)]
-        
+                
         return enemies
         
     

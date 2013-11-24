@@ -25,7 +25,12 @@ is_attackable(bot) = bot has  that can be occupied within 1 turn
 
 # Individual bot strategy:
 
-if nearby_enemies:
+if spawn_imminent and i_am_at_spawn:
+    try safe_flee
+    try emergency_flee
+    emergency_attack
+
+elif nearby_enemies:
     if i_am_overwhelming_enemy: attack
     elif i_am_at_best_attack_spot: attack
     else:
@@ -34,8 +39,8 @@ if nearby_enemies:
         emergency_attack
 
 else sort options to:
+    500 move_away_from_spawn (if turn % 10 == 0)
     400 move_to_best_attack_spot
-    300 move_away_from_spawn (if turn % 10 == 0)
     200 preemptive strike
     100 try move_to_center_but_away_from_other_bots
      50 stand still

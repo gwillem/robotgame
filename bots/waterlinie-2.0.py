@@ -108,6 +108,9 @@ def other_player_id(player_id):
 
 class Robot():
     
+    def is_spawn_imminent(self):
+        return self.turn % 10 in [0,9]
+    
     def act_sanity_check(self):
 
         if self.location not in self.robots:
@@ -406,7 +409,14 @@ class Robot():
         else:
             return None
     
+    def panic(self, src):
+        log(" i am panicking!!" )
+        
+    
     def calculate_proposals_for_loc(self, src):
+        
+        panic = False
+        
         ## find possible moves
         proposals = ProposedMoveCollection()
 
@@ -415,6 +425,9 @@ class Robot():
         
         nearby_enemies = self.find_neighbours(src=src, player_id=self.enemy_id)
         preemptive_strike = self.find_preemptive_strike(src)
+        
+        if is_spawn(src) and self.is_spawn_imminent():
+            panic = True
         
         if nearby_enemies:
             # yields (loc, num_allies_surrounded, hp) tuples
@@ -490,6 +503,9 @@ class Robot():
                     
                 if is_spawn(src):
                     score += 5
+                    
+                if panic:
+                    score += 1000
                 
                 if dst_peer_neighbours < src_peer_neighbours:
                     score += 2 * (9-dst_peer_neighbours) ## dont exceed 100

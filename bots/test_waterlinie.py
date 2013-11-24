@@ -18,6 +18,13 @@ class TestRobot(unittest.TestCase):
 
         return { 'turn' : turn, 'robots' : robots }
     
+    def init_game(self, *args, **kwargs):
+        game = self.create_fake_game(*args, **kwargs)
+        self.robot.location = args[0][0] ## first friendly player
+        self.robot.turn = game['turn']
+        self.robot.robots = game['robots']
+        return self.robot
+    
     def setUp(self):
         import game
         map_data = ast.literal_eval(open('maps/default.py').read())
@@ -30,6 +37,13 @@ class TestRobot(unittest.TestCase):
         robot.location = (3,4)
         
         self.robot = robot
+        
+    def test_act_panic(self):
+        a = [ (11,1) ]
+        e = [ (11,3) ]
+        self.init_game(a, e)
+        
+        self.robot.calculate_proposals_for_loc
         
     def test_is_static(self):
        

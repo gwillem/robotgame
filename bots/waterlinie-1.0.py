@@ -1,25 +1,43 @@
 from __future__ import division
+
+"""
+
+Essence of this bot:
+
+1. Calculate all proposals for all peers => yield proposals
+2. Sort proposals on priority and deterministic algo => yield plan
+3. Execute plan for this.robot
+4. Profit!
+
+TODO
+
+* If enemy neighbour is surrounded by >1 ally, then attack. 
+
+* If surrounded by enemies, flee to square with less enemies
+
+* Only flee spawn point if turn % 10 == 0
+
+* Flee: don't go to spawn point
+
+* If a bot is locked AND at spawn point AND can't flee but also can't attack, then it 
+  should run!
+
+* self.adjacents is ugly
+
+* If stuck at spawn, go to other spawn
+
+"""
+
+#from collections import Counter
 from collections import defaultdict
 import math
+import sys
+import time
 import rg
 import os
-import time
-
-"""
-See waterlinie.md for strategy elaboration TEST
-"""
-
+import unittest
 
 DEBUG=False # os.getenv('USER') == 'willem'
-
-def print_timing(func):
-    def wrapper(*arg):
-        t1 = time.time()
-        res = func(*arg)
-        t2 = time.time()
-        print '%-15.15s %6d ms' % (func.func_name, int ( (t2-t1)*1000.0 ))
-        return res
-    return wrapper
 
 def log(msg):
     if DEBUG:
@@ -49,10 +67,10 @@ class ProposedMove(object):
 class ProposedMoveCollection(list):
     
     def _sort_proposals(self, p):
-        """Sort based on priority, distance to center, angle to center (deterministic)"""
         prio = 1 / p.prio if p.prio else 0
         dist = rg.dist(p.dst, rg.CENTER_POINT)
         angle = center_angle(p.dst)
+    
         return (prio, dist, angle)
        
     def to_plan(self):
@@ -62,6 +80,8 @@ class ProposedMoveCollection(list):
         """Return proposed moves for bots that have only a single proposal"""
         sources = [p.src for p in self]
         bots_with_single_prop = [ x[0] for x in unique_c(sources) if x[1] == 1]
+#        bots_with_single_prop = [ x[0] for x in Counter( sources ).items() if x[1] == 1]
+        
         return [p for p in self if p.src in bots_with_single_prop]
        
     def add_move(self, *args):
@@ -74,17 +94,25 @@ class ProposedMoveCollection(list):
         mystr = ""
         for i, item in enumerate(self):
             mystr += "%3d. %s\n" % (i, item)
+            
         return mystr
             
         
     def eliminate(self, **kwargs):
-        """ delete items for which ALL kwargs hold true 
-        http://stackoverflow.com/questions/6022764/python-removing-list-element-while-iterating-over-list
-        """
+        to_delete = []
+    
+        ## delete items for which ALL kwargs hold true
         
-        for item in list(self):
-            if all([getattr(item,k) == v for k, v in kwargs.items()]):
-                self.remove(item)
+        for i, item in enumerate(self):
+            ## do i need to delete this item?
+            rowmatch = all([getattr(item,k) == v for k, v in kwargs.items()])
+            if rowmatch:
+                to_delete.append(i)
+
+        ## slit into separate code, because its tricky to manipulate a 
+        ## list and iterate it at the same time
+        for i in sorted(to_delete, reverse=True):
+            del self[i]
 
 def is_spawn(loc):
     return 'spawn' in rg.loc_types(loc)
@@ -103,12 +131,14 @@ def unique_c(mylist):
         
     return c
 
-def other_player_id(player_id):
-    return 1 if player_id == 0 else 0
-
 class Robot():
-    
-    def act_sanity_check(self):
+        
+    def act(self, game):
+        
+        self.robots = game['robots']
+        self.turn   = game['turn']
+
+        self.enemy_id = abs(self.player_id-1)
 
         if self.location not in self.robots:
             raise Exception("self.location %s is not in game['robots']: %s" %\
@@ -122,16 +152,7 @@ class Robot():
             self.history_arena = {}
 
         if not hasattr(self, 'history_plan'):
-            self.history_plan = {}        
-    
-    #~ @print_timing
-    def act(self, game):
-        
-        self.robots   = game['robots']
-        self.turn     = game['turn']
-        self.enemy_id = other_player_id(self.player_id)
-        
-        self.act_sanity_check() # initializes history dicts
+            self.history_plan = {}
 
         if self.turn not in self.history_arena:
             """ Only do this for the first bot in a turn.
@@ -143,14 +164,6 @@ class Robot():
 
             self.history_arena[self.turn] = self.robots
 
-            #self.vuln_enemies = self.find_vuln_enemies()
-            self.enemy_next_moves = self.find_enemy_next_moves()
-            self.best_attack_spots = self.find_best_attack_spots()
-            
-            self.enemies_assigned, self.ally_assignments = self.assign_enemies()
-            
-            log( "best attack spots: %s" % self.best_attack_spots )
-            
             proposals = self.collect_all_proposals()
             log( "proposals:\n%s" % proposals )
             
@@ -166,99 +179,17 @@ class Robot():
         
         return plan[self.location]
         
-    def assign_enemies(self):
-        """Create 2 dicts of assignments, one mapped by enemy, one by ally
-        
-        Yields:
-        
-        enemies_assigned = {
-            enemy1 : [ ally1, ally2 ],
-            etc
-        }
-        
-        ally_assignments = {
-            ally1 : enemyX
-        }
-        
-        """
-        enemies = self.find_vuln_enemies()
-        available_for_duty = self.find_all_bots(player_id=self.player_id)
-        
-        enemies_assigned = defaultdict(list)
-
-        #~ print "available for duty: %s" % available_for_duty
-
-        # search 1 and 2 wdist deep
-        for wdist in [1, 2]:
-            for enemy in enemies:
-                ## whom of my trusty soldiers are nearby?
-                for soldier in self.find_neighbours(src=enemy, player_id=self.player_id, wdist=wdist):
-                    if soldier in available_for_duty:
-                        #~ print "Stage %d: I'm assigning my bot %s to enemy %s" % (wdist, soldier, enemy)
-                        enemies_assigned[enemy].append(soldier)
-                        available_for_duty.remove(soldier)
-        
-        # then remove all enemies that are assigned less than 1 soldier
-        # todo: optimization, these bots could be reassigned another enemy!
-        
-        for enemy, soldiers in enemies_assigned.items():
-            if len(soldiers) < 2:
-                del enemies_assigned[enemy]
-
-        ## and build ally_assignments based on enemies_assigned
-        ally_assignments = {}
-        for enemy, soldiers in enemies_assigned.items():
-            for soldier in soldiers:
-                ally_assignments[soldier] = enemy
-            
-        return enemies_assigned, ally_assignments
-        
-    def is_static(self,src):
-        """Has given bot moved in the last turn?
-        Its a heuristic, as there is no id of enemy bots, only location"""
-                   
-        if not hasattr(self,'history_arena'): # testing mode
-            return True
-                   
-        pid = self.history_arena[self.turn][src]['player_id']
-        last_turn = self.turn - 1
-    
-        try:
-            if self.history_arena[last_turn][src]['player_id'] == pid:
-                return True
-        except KeyError:
-            pass
-                    
-        return False
-        
-    def is_vulnerable(self, src):
-        """Does this bot have at least 2 safe attack neighbours?
-        and is it static?"""
-        
-        if not self.is_static(src):
-            return False
-        
-        this_id = self.robots[src]['player_id']
-        other_id = other_player_id(this_id)
-        
-        ## neighbours that are either empty or other player
-        adj = self.adjacents(location=src, filter_id=this_id)
-        
-        ## are these neighbours safe attack points?
-        adj = [x for x in adj if self.count_neighbours(src=x, player_id=this_id) <= 1]
-        
-        if len(adj) <= 1:
-            return False
-        
-        return True
         
     def count_neighbours(self, **kwargs):
         return len(self.find_neighbours(**kwargs))
         
-    def find_neighbours(self, src=None, player_id=None, wdist=1):
+    def find_neighbours(self, src=None, player_id=None):
         """ Give me non-empty adjacent squares for 'src' """
-        src = src or self.location
-        locs = self.ring_search(src,wdist=wdist)
+        
+        if src == None:
+            src = self.location
+            
+        locs = rg.locs_around(src, filter_out=('invalid', 'obstacle'))
             
         if player_id == None:
             neighbours = [loc for loc in locs if loc in self.robots]
@@ -271,9 +202,14 @@ class Robot():
             neighbours.sort(key = lambda x: self.robots[x]['hp'])
             
         return neighbours
-              
-    def filter_locs(self, locs, filter_id=None, filter_empty=False, only_empty=False, only_id=False):
-
+        
+    ## todo: fix me!
+    def adjacents(self, location=None, filter_id=None, filter_empty=False, only_empty=False, only_id=False):
+        if location == None:
+            location = self.location
+            
+        locs = rg.locs_around(location, filter_out=('invalid', 'obstacle'))
+                    
         if only_empty != None:
             return [loc for loc in locs if loc not in self.robots]
             
@@ -287,45 +223,28 @@ class Robot():
             locs = [loc for loc in locs if loc not in self.robots \
                 or self.robots[loc]['player_id'] != filter_id]
         
-        
-    ## todo: fix me!
-    def adjacents(self, location=None, wdist=1, **kwargs):
-        if location == None:
-            location = self.location
-            
-        if wdist == 1:
-            locs = rg.locs_around(location, filter_out=('invalid', 'obstacle'))
-        else:
-            locs = locs_around(location, wdist=wdist)
-        
-        return self.filter_locs(locs, **kwargs)
-                    
+        return locs
+
     def find_all_bots(self, player_id=None):
+
+        #~ print "player id is %s" % player_id
+    
         if player_id != None:
             return [loc for loc in self.robots if self.robots[loc]['player_id'] == player_id]
         else:
             return [loc for loc in self.robots]    
         
+
     def collect_all_proposals(self):
         """ Calculate proposed moves for all of my peers """
+        
         proposals = ProposedMoveCollection()
+        
         for peer in self.find_all_bots(self.player_id):
             proposals.extend(self.calculate_proposals_for_loc(peer))
+        
         return proposals
         
-    def ring_search(self, src, wdist=1):
-        """Give me all locations that are within wdist of src excluding src"""
-        result = []
-        for x in range(src[0]-wdist, src[0]+wdist+1):
-            for y in range(src[1]-wdist, src[1]+wdist+1):
-                xy = (x,y)
-                if rg.loc_types(xy) in ['obstacle','invalid']:
-                    continue
-                if rg.wdist(src,xy) <= wdist:
-                    result.append(xy)
-                
-        result.remove(src)
-        return result
     
     def try_to_flee(self, src):
         locs = self.adjacents(src, only_empty=True)
@@ -353,39 +272,6 @@ class Robot():
             
         return ProposedMove(100, 'attack', src, enemies[0])
     
-    def find_enemy_next_moves(self):
-        """Return dict of moves that enemy /could/ move to next turn, 
-        with the value == num of enemies that could move here 
-        (increasing chance that it will happen)"""
-        
-        enemies = self.find_all_bots(player_id=self.enemy_id)
-        moves = defaultdict(int)
-        for e in enemies:
-            for loc in self.adjacents(e):
-                moves[loc] += 1
-            
-        return moves
-    
-    def find_best_attack_spots(self):
-        hit_list = self.find_vuln_enemies()
-        
-        spots = []
-        for enemy in hit_list:
-            spots.extend(self.adjacents(location=enemy, filter_id=self.player_id))
-            
-        ## only those spots that have just 1 neighbouring enemy
-        spots = [x for x in spots if self.count_neighbours(src=x, player_id=self.enemy_id) == 1]
-            
-        return dict((x,10) for x in spots)
-
-    def find_vuln_enemies(self):
-        """Scan arena for vuln enemies"""
-        enemies = self.find_all_bots(player_id=self.enemy_id)
-        enemies = [x for x in enemies if self.is_vulnerable(x)]
-        
-        return enemies
-        
-    
     def find_preemptive_strike(self, src):
         
         ## which neighbour has most enemy neighbours?
@@ -393,6 +279,8 @@ class Robot():
         
         neighbours = [(n,self.count_neighbours(src=n,player_id=self.enemy_id)) for n in neighbours]
         neighbours.sort(key = lambda x: x[1], reverse=True)
+        
+        #~ print "%s : %s" % (src, neighbours)
         
         if neighbours and neighbours[0][1]: ## does the no 1 have enemy neighbours?
             return ProposedMove(100, 'attack', src, neighbours[0][0]) 
@@ -441,10 +329,12 @@ class Robot():
             try:
                 proposals.append(self.try_to_flee(src))
             except CannotFlee:
-                ## todo! try forced_flee
                 #~ print "%s : Can't flee, will attack weakest neighbour" % (src,)
                 proposals.append(self.attack_weakest_neighbour(src))
                 
+        elif preemptive_strike: ## todo: predict enemy movement based on previous steps
+            proposals.append(preemptive_strike)
+                    
         else: ## sort possible moves
             possibles = self.adjacents(src, only_empty=True)
             
@@ -453,29 +343,14 @@ class Robot():
             
             
             for dst in possibles:
-                
-                if src in self.ally_assignments:
-
-                    src_target_distance = rg.wdist(src, self.ally_assignments[src])
-                    dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
-                                        
-                    ## prepare for swarm
-                    if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
-                        score = 400 + self.best_attack_spots[dst]
-                        proposals.add_move(score, 'move', src, dst)
-
-
-                ## pre-emptive strike
-                if dst in self.enemy_next_moves:
-                    score = 200 + self.enemy_next_moves[dst]
-                    proposals.add_move(score, 'attack', src, dst)
-                
-                
-                ## non-aggressive move logic commences
                 score = 49
                 
                 dst_peer_neighbours = self.count_neighbours(src=dst,player_id=self.player_id) - 1 
                 dst_center_distance = rg.dist(dst, rg.CENTER_POINT)
+                
+                
+                
+                #~ print "%s has %d peer neighbours" % (dst, dst_peer_neighbours)
                 
                 if is_spawn(dst) and not is_spawn(src):
                     #~ print "%s is not in %s" % (dst, rg.loc_types(dst) )
@@ -540,12 +415,131 @@ class Robot():
         # moves is a list of proposals, need to transform to api-compatible format
         return moves.to_plan()  
         
+class TestRobot(unittest.TestCase):
+
+    @staticmethod
+    def create_fake_game(allies,enemies,turn=1):
+        
+        robots = {}
+        for x in allies:
+            y = {'player_id': 0, 'hp': 50, 'location': x}
+            robots[x] = y
+
+        for x in enemies:
+            y = {'player_id': 1, 'hp': 50, 'location': x}
+            robots[x] = y
+
+        return { 'turn' : turn, 'robots' : robots }
+    
+    def setUp(self):
+        import game
+        game.init_settings('maps/default.py')
+        
+        robot = Robot()
+        robot.hp = 50
+        robot.player_id = 0
+        robot.enemy_id = 1
+        robot.location = (3,4)
+        
+        self.robot = robot
+    
+    def test_attack_if_we_are_more(self):
+        
+        a = [(9,9),(10,10)]
+        e = [(10,9)]
+    
+        self.robot.location = (9,9)
+        
+        game = self.create_fake_game(a,e)
+        
+        rv = self.robot.act(self.create_fake_game(a,e))
+        assert rv == ['attack',(10,9)], rv
+        
+    
+    def test_attack_weakest_neighbour(self):
+        a = [(9,9),]
+        e = [(8,9),(10,9),]
+        
+        game = self.create_fake_game(a,e)
+        game['robots'][(8,9)]['hp'] = 10
+        
+        self.robot.robots = game['robots']
+
+      
+        assert self.robot.attack_weakest_neighbour(src=(9,9)).dst == (8,9)
+        
+        game['robots'][(8,9)]['hp'] = 50
+        game['robots'][(10,9)]['hp'] = 10
+
+        assert self.robot.attack_weakest_neighbour(src=(9,9)).dst == (10,9)       
+    
+    def test_proposed_move_collection(self):
+        
+        pmc = ProposedMoveCollection()
+        
+        for i in range(3):
+            pmc.add_move(100, 'move', (1,1), (i,i))
+        assert len(pmc) == 3, pmc
+        
+        pmc.eliminate(dst=(1,1))
+        assert len(pmc) == 2, pmc
+        
+        pmc.eliminate(action='move')
+        assert len(pmc) == 0, pmc
+        
+    def test_act_guard(self):
+              
+        game = {'turn': 12, 'robots': {(15, 12): {'player_id': 1, 'hp': 50, 'location': (15, 12)}, (15, 13): {'player_id': 1, 'hp': 41, 'location': (15, 13)}, (13, 2): {'player_id': 0, 'hp': 50, 'location': (13, 2)}, (8, 2): {'player_id': 1, 'hp': 50, 'location': (8, 2)}, (12, 12): {'player_id': 1, 'hp': 50, 'location': (12, 12)}, (12, 6): {'player_id': 1, 'hp': 50, 'location': (12, 6)}, (12, 5): {'player_id': 1, 'hp': 50, 'location': (12, 5)}, (13, 7): {'player_id': 1, 'hp': 50, 'location': (13, 7)}, (7, 16): {'player_id': 0, 'hp': 50, 'location': (7, 16)}, (2, 12): {'player_id': 0, 'hp': 50, 'location': (2, 12)}, (3, 6): {'player_id': 1, 'hp': 50, 'location': (3, 6)}, (6, 12): {'player_id': 1, 'hp': 50, 'location': (6, 12)}, (15, 14): {'player_id': 0, 'hp': 50, 'location': (15, 14)}, (3, 4): {'player_id': 0, 'hp': 50, 'location': (3, 4)}, (4, 4): {'player_id': 1, 'hp': 50, 'location': (4, 4)}, (9, 17): {'player_id': 0, 'hp': 50, 'location': (9, 17)}}}
+        
+        rv = self.robot.act(game)
+        assert rv == ['move',(3,5)], rv
+        
+    def test_find_neighbours(self):
+        
+        a = [(9,9),(9,8),(9,10),]
+        e = [(8,9),]
+        
+        game = self.create_fake_game(a,e)
+        self.robot.robots = game['robots']
+        
+        assert len(self.robot.find_neighbours(src=(9,9), player_id=0) ) == 2, \
+            self.robot.find_neighbours(src=(9,9), player_id=0)
+            
+        assert len(self.robot.find_neighbours(src=(9,9), player_id=1) ) == 1, \
+            self.robot.find_neighbours(src=(9,9), player_id=1)
+        
+    def test_count_find_neighbours(self):
+        a = [(9,9),(9,8),(9,10),]
+        e = [(8,9),]
+        
+        game = self.create_fake_game(a,e)
+        self.robot.robots = game['robots']
+
+        assert self.robot.count_neighbours(src=(9,9), player_id=0) == 2
+        assert self.robot.count_neighbours(src=(9,9), player_id=1) == 1
+        
+    def test_find_all_bots(self):
+
+        game = {'turn': 1, 'robots': {(13, 2): {'player_id': 1, 'hp': 50, 'location': (13, 2)}, (17, 7): {'player_id': 0, 'hp': 50, 'location': (17, 7)}, (12, 16): {'player_id': 0, 'hp': 50, 'location': (12, 16)}, (13, 16): {'player_id': 0, 'hp': 50, 'location': (13, 16)}, (1, 10): {'player_id': 1, 'hp': 50, 'location': (1, 10)}, (1, 8): {'player_id': 1, 'hp': 50, 'location': (1, 8)}, (8, 17): {'player_id': 0, 'hp': 50, 'location': (8, 17)}, (15, 4): {'player_id': 1, 'hp': 50, 'location': (15, 4)}, (14, 3): {'player_id': 1, 'hp': 50, 'location': (14, 3)}, (3, 14): {'player_id': 0, 'hp': 50, 'location': (3, 14)}}}
+        #~ rv = robot.act(game)
+
+        self.robot.robots = game['robots']
+        
+        #~ print self.robot.find_all_bots(0)
+        
+        assert len(self.robot.find_all_bots(0)) == 5
+        assert len(self.robot.find_all_bots(1)) == 5
+        assert len(self.robot.find_all_bots(2)) == 0
+
+class TestHelperFunctions(unittest.TestCase):
+    def test_unique_c(self):
+        mylist = "a b a c b d e c a".split()
+        rv = unique_c(mylist)
+        assert rv['a'] == 3, rv
+        assert rv['d'] == 1, rv
+
 class NoBotFound(Exception):
     pass
 
 class CannotFlee(Exception):
     pass
-
-        
-
-        

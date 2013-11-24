@@ -43,6 +43,11 @@ else sort options to:
 
 TODO
 
+* swap places if somebody is under attack
+
+* If last preemptive strike didn't yield result, don't repeat
+* Run for your life if blocked at spawn point
+
 * If enemy neighbour is surrounded by >1 ally, then attack. 
 * If surrounded by enemies, flee to square with less enemies
 * Only flee spawn point if turn % 10 == 0
@@ -53,3 +58,12 @@ TODO
 * If stuck at spawn, go to other spawn
 * Only classify enemy as vulnerable, if he is static -> is_static()
 * Optimize ally assignments (in assign_enemies()), as some bots now miss the boat
+
+1. match replay keyboard shortcuts
+3. match > display some more info about owners
+4. disable -> remove bot
+
+==
+
+sys exit if you're about to loose
+store match results in mongodb

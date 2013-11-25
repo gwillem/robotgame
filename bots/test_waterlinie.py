@@ -1,3 +1,4 @@
+from __future__ import division
 import ast # for the literal_eval in unittest
 import unittest
 import waterlinie as wl
@@ -23,7 +24,7 @@ class TestRobot(unittest.TestCase):
         self.robot.location = args[0][0] ## first friendly player
         self.robot.turn = game['turn']
         self.robot.robots = game['robots']
-        return self.robot
+        return self.robot, game
     
     def setUp(self):
         import game
@@ -35,15 +36,18 @@ class TestRobot(unittest.TestCase):
         robot.player_id = 0
         robot.enemy_id = 1
         robot.location = (3,4)
+        robot.test_game = True
         
         self.robot = robot
         
     def test_act_panic(self):
+        # a is blocked by e, and at spawn point. Panic!
         a = [ (11,1) ]
         e = [ (11,3) ]
-        self.init_game(a, e)
+        r, g = self.init_game(a, e)
+        rv = r.act(g)
         
-        self.robot.calculate_proposals_for_loc
+        assert rv == ['move',(10,1)]
         
     def test_is_static(self):
        
@@ -58,14 +62,13 @@ class TestRobot(unittest.TestCase):
         self.robot.history_arena[2] = game['robots']
         self.robot.turn = 2        
         
-        #~ assert self.robot.is_static((9,9)) == True
+        assert self.robot.is_static((9,9)) == True
 
         game = self.create_fake_game([],[(10,9)])
         self.robot.history_arena[3] = game['robots']
         self.robot.turn = 3
         
         assert self.robot.is_static((10,9)) == False
-
         
         
     def test_attack_if_we_are_more(self):
@@ -150,19 +153,25 @@ class TestRobot(unittest.TestCase):
         o o
         """
         
-        game = self.create_fake_game(a,e)
-        self.robot.robots = game['robots']
+        r,g = self.init_game(a,e)
         
-        assert self.robot.is_vulnerable((9,9)) == True
-        assert self.robot.is_vulnerable((3,3)) == False
-        assert self.robot.is_vulnerable((3,4)) == False
-        assert self.robot.is_vulnerable((5,4)) == True
+        assert r.is_vulnerable((9,9)) == True
+        assert r.is_vulnerable((3,3)) == False
+        assert r.is_vulnerable((3,4)) == False
+        assert r.is_vulnerable((5,4)) == True
         
         a = [(8,8),(8,9),(10,9),]
         e = [(9,9),]
-        game = self.create_fake_game(a,e)
-        self.robot.robots = game['robots']
-        assert self.robot.is_vulnerable((9,9)) == True
+        r,g = self.init_game(a,e)
+        assert r.is_vulnerable((9,9))
+        
+    def test_is_vulnerable2(self):
+        a = [(8,8),]
+        e = [(9,9),]
+        r, g = self.init_game(a,e)
+        r.act(g)
+        assert r.is_vulnerable((9,9)) 
+        
         
         
     def test_find_best_attack_spots(self):
@@ -193,9 +202,46 @@ class TestRobot(unittest.TestCase):
         
         assert vuln== [(5,4),(9,9)], vuln
         
+    def test_act_sane_surround(self):
+        a = [(8,10),(9,11),(8,9),(9,9),]
+        e = [(8,12),(9,13),]
+        r, g = self.init_game(a,e)
+        rv = r.act(g)
+        assert rv == ['attack',(8,11)], rv
         
+    def test_fill_empty_peer_spot(self):
+        game = {'turn': 70, 'robots': {(6, 9): {'player_id': 1, 'robot_id': 15, 'hp': 50, 'location': (6, 9)}, (16, 8): {'player_id': 0, 'hp': 50, 'location': (16, 8)}, (10, 8): {'player_id': 1, 'robot_id': 17, 'hp': 30, 'location': (10, 8)}, (6, 6): {'player_id': 1, 'robot_id': 55, 'hp': 42, 'location': (6, 6)}, (2, 8): {'player_id': 0, 'hp': 50, 'location': (2, 8)}, (9, 8): {'player_id': 1, 'robot_id': 9, 'hp': 50, 'location': (9, 8)}, (4, 7): {'player_id': 1, 'robot_id': 47, 'hp': 30, 'location': (4, 7)}, (13, 5): {'player_id': 0, 'hp': 50, 'location': (13, 5)}, (15, 13): {'player_id': 0, 'hp': 50, 'location': (15, 13)}, (7, 16): {'player_id': 1, 'robot_id': 68, 'hp': 50, 'location': (7, 16)}, (10, 14): {'player_id': 0, 'hp': 41, 'location': (10, 14)}, (15, 5): {'player_id': 1, 'robot_id': 65, 'hp': 50, 'location': (15, 5)}, (10, 3): {'player_id': 0, 'hp': 33, 'location': (10, 3)}, (16, 7): {'player_id': 0, 'hp': 50, 'location': (16, 7)}, (6, 14): {'player_id': 0, 'hp': 50, 'location': (6, 14)}, (8, 14): {'player_id': 0, 'hp': 50, 'location': (8, 14)}, (4, 9): {'player_id': 0, 'hp': 50, 'location': (4, 9)}, (16, 10): {'player_id': 1, 'robot_id': 25, 'hp': 40, 'location': (16, 10)}, (2, 9): {'player_id': 0, 'hp': 50, 'location': (2, 9)}, (9, 15): {'player_id': 0, 'hp': 50, 'location': (9, 15)}, (10, 7): {'player_id': 1, 'robot_id': 6, 'hp': 50, 'location': (10, 7)}, (3, 10): {'player_id': 0, 'hp': 50, 'location': (3, 10)}, (4, 4): {'player_id': 0, 'hp': 25, 'location': (4, 4)}, (10, 12): {'player_id': 0, 'hp': 50, 'location': (10, 12)}, (8, 8): {'player_id': 1, 'robot_id': 39, 'hp': 32, 'location': (8, 8)}, (15, 11): {'player_id': 0, 'hp': 50, 'location': (15, 11)}, (3, 6): {'player_id': 1, 'robot_id': 57, 'hp': 50, 'location': (3, 6)}, (14, 14): {'player_id': 1, 'robot_id': 56, 'hp': 50, 'location': (14, 14)}, (8, 16): {'player_id': 1, 'robot_id': 35, 'hp': 40, 'location': (8, 16)}, (11, 2): {'player_id': 0, 'hp': 42, 'location': (11, 2)}, (9, 7): {'player_id': 1, 'robot_id': 59, 'hp': 20, 'location': (9, 7)}, (14, 10): {'player_id': 0, 'hp': 50, 'location': (14, 10)}, (12, 14): {'player_id': 1, 'robot_id': 45, 'hp': 32, 'location': (12, 14)}, (3, 13): {'player_id': 1, 'robot_id': 7, 'hp': 4, 'location': (3, 13)}, (8, 11): {'player_id': 1, 'robot_id': 16, 'hp': 50, 'location': (8, 11)}, (4, 14): {'player_id': 0, 'hp': 13, 'location': (4, 14)}, (5, 15): {'player_id': 0, 'hp': 50, 'location': (5, 15)}, (9, 6): {'player_id': 1, 'robot_id': 18, 'hp': 23, 'location': (9, 6)}, (7, 15): {'player_id': 1, 'robot_id': 29, 'hp': 22, 'location': (7, 15)}, (2, 7): {'player_id': 0, 'hp': 15, 'location': (2, 7)}, (10, 5): {'player_id': 1, 'robot_id': 26, 'hp': 33, 'location': (10, 5)}, (13, 3): {'player_id': 0, 'hp': 50, 'location': (13, 3)}, (4, 6): {'player_id': 1, 'robot_id': 69, 'hp': 35, 'location': (4, 6)}, (10, 10): {'player_id': 1, 'robot_id': 38, 'hp': 41, 'location': (10, 10)}, (9, 2): {'player_id': 1, 'robot_id': 36, 'hp': 22, 'location': (9, 2)}, (10, 16): {'player_id': 1, 'robot_id': 67, 'hp': 50, 'location': (10, 16)}, (11, 5): {'player_id': 1, 'robot_id': 8, 'hp': 13, 'location': (11, 5)}, (2, 11): {'player_id': 0, 'hp': 42, 'location': (2, 11)}, (11, 3): {'player_id': 0, 'hp': 50, 'location': (11, 3)}, (3, 8): {'player_id': 0, 'hp': 50, 'location': (3, 8)}, (14, 12): {'player_id': 0, 'hp': 50, 'location': (14, 12)}, (12, 4): {'player_id': 0, 'hp': 32, 'location': (12, 4)}, (15, 9): {'player_id': 0, 'hp': 50, 'location': (15, 9)}, (9, 1): {'player_id': 1, 'robot_id': 66, 'hp': 50, 'location': (9, 1)}, (11, 15): {'player_id': 1, 'robot_id': 27, 'hp': 42, 'location': (11, 15)}, (7, 8): {'player_id': 1, 'robot_id': 28, 'hp': 30, 'location': (7, 8)}, (5, 12): {'player_id': 0, 'hp': 50, 'location': (5, 12)}}}
+        self.robot.location = (9,1)
+        self.robot.player_id = 1
+        self.robot.act(game)
         
+        props = self.robot.calculate_proposals_for_loc((9,1))
+        props.sort()
         
+        assert props[0].action == 'move', props
+        assert props[0].dst == (9,2), props
+        
+        #~ assert rv == ['move', (9,2)], rv
+        
+    def test_adjacents(self):
+        a = [(9,9),(9,10),]
+        e = [(9,8),]
+        r, g = self.init_game(a,e)
+        
+        assert r.adjacents(location=(9,9)) \
+            == [(9, 10), (10, 9), (9, 8), (8, 9)]
+
+        assert r.adjacents(location=(9,9),filter_empty=True) \
+            == [(9, 10), (9, 8),]
+
+        assert r.adjacents(location=(9,9),only_id=1) \
+            == [(9,8),]
+
+        assert r.adjacents(location=(9,9),filter_id=0) \
+            == [(10, 9), (9, 8), (8, 9)]
+
+        assert r.adjacents(location=(9,9),only_empty=True) \
+            == [(10, 9), (8, 9),]
         
     def test_count_find_neighbours(self):
         a = [(9,9),(9,8),(9,10),]
@@ -246,12 +292,11 @@ class TestRobot(unittest.TestCase):
         assert rv[0] == 'move', rv
         assert rv[1] in [(9,8),(10,9)], rv
         
-    def test_dont_move_to_best_attack_spot_when_alone(self):
+    def test_act_dont_move_to_best_attack_spot_when_alone(self):
         a = [(8,8),]
         e = [(9,9),]
-        game = self.create_fake_game(a,e)
-        self.robot.location = (8,8)
-        rv = self.robot.act(game)
+        r, g = self.init_game(a, e)
+        rv = r.act(g)
         assert rv[0] != 'move', rv
         
     def test_find_enemy_next_moves(self):
@@ -275,6 +320,24 @@ class TestRobot(unittest.TestCase):
         rv = self.robot.ring_search((9,9),wdist=2)
         assert len(rv) == 12, rv
 
+class TestProposedMoveCollection(unittest.TestCase):
+    def setUp(self):
+        import game
+        map_data = ast.literal_eval(open('maps/default.py').read())
+        game.init_settings(map_data)
+    
+    def test_pmc_sort(self):
+        pmc = wl.ProposedMoveCollection()
+        x = (9,9)
+        y = (10,9)
+        
+        pmc.add_move(100,'bla',x,y)
+        pmc.add_move(200,'bla',x,y)
+        pmc.add_move(50,'bla',x,y)
+        pmc.add_move(-40,'bla',x,y)
+        
+        pmc.sort()
+        assert pmc[0].prio == 200, pmc
 
 class TestHelperFunctions(unittest.TestCase):
     def test_unique_c(self):

@@ -12,6 +12,17 @@ See waterlinie.md for strategy elaboration
 DEBUG = True # os.getenv('USER') == 'willem'
 LOCAL = os.getenv('USER') == 'willem'
 
+SCORE = {
+    'suicide' : 2000,
+    'panic' : 1000,
+    'attack_underwhelmed_enemy' : 500,
+    'move_to_best_attack_spot' : 400,
+    'preemptive_strike' : 200,
+    'guard' : 50,
+}
+
+CENTER_POINT = (9,9)
+
 def print_timing(func):
     def wrapper(*arg):
         t1 = time.time()
@@ -47,13 +58,12 @@ class ProposedMove(object):
         return action
         
 class ProposedMoveCollection(list):
-    
     def _sort_proposals(self, p):
-        """Sort based on priority, distance to center, angle to center (deterministic)"""
-        prio = 1 / p.prio if p.prio else 0
-        dist = rg.dist(p.dst, rg.CENTER_POINT)
+        """Sort based on priority, distance to center, angle to 
+        center (deterministic)""" 
+        dist = rg.dist(p.dst, CENTER_POINT)
         angle = center_angle(p.dst)
-        return (prio, dist, angle)
+        return (-p.prio, dist, angle)
        
     def to_plan(self):
         return dict((p.src, p.to_action()) for p in self)
@@ -66,11 +76,13 @@ class ProposedMoveCollection(list):
        
     def add_move(self, *args):
         self.append(ProposedMove(*args))
+        return self
        
-    def sort(self):
-        return super(ProposedMoveCollection, self).sort(key=self._sort_proposals)
+    def sort(self, *args, **kwargs):
+        return super(ProposedMoveCollection, self).sort(key=self._sort_proposals, *args, **kwargs)
         
     def __str__(self):
+        self.sort()
         mystr = ""
         for i, item in enumerate(self):
             mystr += "%3d. %s\n" % (i, item)
@@ -81,7 +93,6 @@ class ProposedMoveCollection(list):
         """ delete items for which ALL kwargs hold true 
         http://stackoverflow.com/questions/6022764/python-removing-list-element-while-iterating-over-list
         """
-        
         for item in list(self):
             if all([getattr(item,k) == v for k, v in kwargs.items()]):
                 self.remove(item)
@@ -141,9 +152,8 @@ class Robot():
             They all share the same object, so skip redundant calculations """
 
             log( "********** turn %d *********" % game['turn'] )
-            if not LOCAL:
-                log ("player_id: %s, hp: %s, location: %s" % (self.player_id, self.hp, self.location,))
-                log( "I received game data: %s" % game )
+            log ("player_id: %s, hp: %s, location: %s" % (self.player_id, self.hp, self.location,))
+            log( "I received game data: %s" % game )
 
             self.history_arena[self.turn] = self.robots
 
@@ -153,6 +163,8 @@ class Robot():
             
             self.enemies_assigned, self.ally_assignments = self.assign_enemies()
             
+            log( "enemies assigned: %s" % self.enemies_assigned)
+            log( "ally_assignments: %s" % self.ally_assignments)
             log( "best attack spots: %s" % self.best_attack_spots )
             
             proposals = self.collect_all_proposals()
@@ -191,7 +203,7 @@ class Robot():
         enemies_assigned = defaultdict(list)
 
         log( "available for duty: %s" % available_for_duty )
-        log( "enemies: %s" % enemies )
+        #~ log( "enemies: %s" % enemies )
 
         # search 1 and 2 wdist deep
         for wdist in [1, 2]:
@@ -220,7 +232,7 @@ class Robot():
         
     def is_static(self,src):
         """Has given bot moved in the last turn?
-        Its a heuristic, as there is no id of enemy bots, only location"""
+        Its a estimate, as there is no id of enemy bots, only location"""
                    
         if not hasattr(self,'turn'):
             return True
@@ -231,10 +243,13 @@ class Robot():
         pid = self.history_arena[self.turn][src]['player_id']
         last_turn = self.turn - 1
     
-        try:
-            if self.history_arena[last_turn][src]['player_id'] != pid:
-                return False
-        except KeyError:
+        if last_turn not in self.history_arena:
+            return True
+            
+        if src not in self.history_arena[last_turn]:
+            return False
+            
+        if self.history_arena[last_turn][src]['player_id'] != pid:
             return False
                     
         return True
@@ -242,8 +257,6 @@ class Robot():
     def is_vulnerable(self, src):
         """Does this bot have at least 2 safe attack neighbours?
         and is it static?"""
-        
-        
         
         if not self.is_static(src):
             return False
@@ -282,21 +295,22 @@ class Robot():
             
         return neighbours
               
-    def filter_locs(self, locs, filter_id=None, filter_empty=False, only_empty=False, only_id=False):
+    def filter_locs(self, locs, filter_id=None, filter_empty=False, only_empty=False, only_id=None):
 
-        if only_empty != None:
+        if only_empty == True:
             return [loc for loc in locs if loc not in self.robots]
             
         if only_id != None:
             return [loc for loc in locs if loc in self.robots and self.robots[loc]['player_id'] == only_id]
                     
-        if filter_empty != None:
+        if filter_empty == True:
             locs = [loc for loc in locs if loc in self.robots]
             
         if filter_id != None:
             locs = [loc for loc in locs if loc not in self.robots \
                 or self.robots[loc]['player_id'] != filter_id]
         
+        return locs
         
     ## todo: fix me!
     def adjacents(self, location=None, wdist=1, **kwargs):
@@ -394,26 +408,15 @@ class Robot():
         enemies = [x for x in enemies if self.is_vulnerable(x)]
                 
         return enemies
-        
-    
-    def find_preemptive_strike(self, src):
-        
-        ## which neighbour has most enemy neighbours?
-        neighbours = self.adjacents(src, only_empty=True)
-        
-        neighbours = [(n,self.count_neighbours(src=n,player_id=self.enemy_id)) for n in neighbours]
-        neighbours.sort(key = lambda x: x[1], reverse=True)
-        
-        if neighbours and neighbours[0][1]: ## does the no 1 have enemy neighbours?
-            return ProposedMove(100, 'attack', src, neighbours[0][0]) 
-        else:
-            return None
     
     def panic(self, src):
         log(" i am panicking!!" )
         
     
     def calculate_proposals_for_loc(self, src):
+        """
+        Given a src, calculate a ProposedMoveCollection with priorities
+        """
         
         panic = False
         
@@ -421,12 +424,20 @@ class Robot():
         proposals = ProposedMoveCollection()
 
         ## stand still is also valid
-        proposals.add_move(50, 'guard', src)
+        proposals.add_move(SCORE['guard'], 'guard', src)
         
         nearby_enemies = self.find_neighbours(src=src, player_id=self.enemy_id)
-        preemptive_strike = self.find_preemptive_strike(src)
+        if len(nearby_enemies) >= 3: ## suicide?
+            weak_enemies = [x for x in nearby_enemies if self.robots[x]['hp'] <= 15]
+            they_might_kill_me = self.robots[src]['hp'] < 10
+            if weak_enemies and they_might_kill_me:
+                return proposal.add_move(SCORE['suicide'], 'suicide', src)
+        
         
         if is_spawn(src) and self.is_spawn_imminent():
+            panic = True
+        
+        if len(nearby_enemies) >= 2:
             panic = True
         
         if nearby_enemies:
@@ -435,27 +446,9 @@ class Robot():
                 for x in nearby_enemies if self.count_neighbours(src=x,player_id=self.player_id) > 1]
 
             overwhelmed_enemies.sort(key=lambda x: (x[1], x[2]), reverse=True)
-
-        
-        """ Pseudo code:
-        
-        if i_am_surrounded:
-            try:
-                return try_to_flee
-            except: ## no can do
-                return attack_weakest_neighbour
-                
-        if somebody_will_step_in_my_comfort_zone:
-            return attack_likeliest_loc
-        else:
-            move or guard, depending on position and target location (spawn)
-            
-        """
-        
-        #~ print "%s : preemptive strike: %s" % (src,preemptive_strike)
         
         if nearby_enemies and overwhelmed_enemies:
-            proposals.add_move(110,'attack',src,overwhelmed_enemies[0][0])
+            proposals.add_move(SCORE['attack_underwhelmed_enemy'],'attack',src,overwhelmed_enemies[0][0])
 
         elif nearby_enemies:
             try:
@@ -466,10 +459,10 @@ class Robot():
                 proposals.append(self.attack_weakest_neighbour(src))
                 
         else: ## sort possible moves
-            possibles = self.adjacents(src, only_empty=True)
+            possibles = self.adjacents(src, filter_id=self.enemy_id)
             
             src_peer_neighbours = self.count_neighbours(src=src,player_id=self.player_id)
-            src_center_distance = rg.dist(src, rg.CENTER_POINT)
+            src_center_distance = rg.dist(src, CENTER_POINT)
             
             
             for dst in possibles:
@@ -481,13 +474,13 @@ class Robot():
                                         
                     ## prepare for swarm
                     if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
-                        score = 400 + self.best_attack_spots[dst]
+                        score = SCORE['move_to_best_attack_spot'] + self.best_attack_spots[dst]
                         proposals.add_move(score, 'move', src, dst)
 
 
                 ## pre-emptive strike
                 if dst in self.enemy_next_moves:
-                    score = 200 + self.enemy_next_moves[dst]
+                    score = SCORE['preemptive_strike'] + self.enemy_next_moves[dst]
                     proposals.add_move(score, 'attack', src, dst)
                 
                 
@@ -495,7 +488,7 @@ class Robot():
                 score = 49
                 
                 dst_peer_neighbours = self.count_neighbours(src=dst,player_id=self.player_id) - 1 
-                dst_center_distance = rg.dist(dst, rg.CENTER_POINT)
+                dst_center_distance = rg.dist(dst, CENTER_POINT)
                 
                 if is_spawn(dst) and not is_spawn(src):
                     #~ print "%s is not in %s" % (dst, rg.loc_types(dst) )
@@ -505,7 +498,10 @@ class Robot():
                     score += 5
                     
                 if panic:
-                    score += 1000
+                    score += SCORE['panic']
+                    
+                if dst in self.enemy_next_moves:
+                    score -= 100
                 
                 if dst_peer_neighbours < src_peer_neighbours:
                     score += 2 * (9-dst_peer_neighbours) ## dont exceed 100
@@ -568,7 +564,3 @@ class NoBotFound(Exception):
 
 class CannotFlee(Exception):
     pass
-
-        
-
-        

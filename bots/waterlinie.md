@@ -48,6 +48,7 @@ else sort options to:
 
 TODO
 
+* add suicide
 * swap places if somebody is under attack
 
 * If last preemptive strike didn't yield result, don't repeat

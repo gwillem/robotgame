@@ -467,15 +467,15 @@ class Robot():
             
             for dst in possibles:
                 
-                if src in self.ally_assignments:
-
-                    src_target_distance = rg.wdist(src, self.ally_assignments[src])
-                    dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
-                                        
-                    ## prepare for swarm
-                    if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
-                        score = SCORE['move_to_best_attack_spot'] + self.best_attack_spots[dst]
-                        proposals.add_move(score, 'move', src, dst)
+                #~ if src in self.ally_assignments:
+#~ 
+                    #~ src_target_distance = rg.wdist(src, self.ally_assignments[src])
+                    #~ dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
+                                        #~ 
+                    #~ ## prepare for swarm
+                    #~ if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
+                        #~ score = SCORE['move_to_best_attack_spot'] + self.best_attack_spots[dst]
+                        #~ proposals.add_move(score, 'move', src, dst)
 
 
                 ## pre-emptive strike

@@ -13,14 +13,15 @@ DEBUG = True # os.getenv('USER') == 'willem'
 LOCAL = os.getenv('USER') == 'willem'
 
 SCORE = {
-    'suicide' : 3000,
-    'make_way' : 2000,
+    'suicide' : 2000,
     'panic' : 1000,
     'attack_underwhelmed_enemy' : 500,
     'move_to_best_attack_spot' : 400,
     'preemptive_strike' : 200,
     'guard' : 50,
 }
+
+SPAWN_POINTS = ((7,1),(8,1),(9,1),(10,1),(11,1),(5,2),(6,2),(12,2),(13,2),(3,3),(4,3),(14,3),(15,3),(3,4),(15,4),(2,5),(16,5),(2,6),(16,6),(1,7),(17,7),(1,8),(17,8),(1,9),(17,9),(1,10),(17,10),(1,11),(17,11),(2,12),(16,12),(2,13),(16,13),(3,14),(15,14),(3,15),(4,15),(14,15),(15,15),(5,16),(6,16),(12,16),(13,16),(7,17),(8,17),(9,17),(10,17),(11,17))
 
 CENTER_POINT = (9,9)
 
@@ -72,12 +73,22 @@ class ProposedMoveCollection(list):
     def find_singles(self):
         """Return proposed moves for bots that have only a single proposal"""
         sources = [p.src for p in self]
+        ## todo: should sort so that moves have higher priority to prevent collisions
         bots_with_single_prop = [ x[0] for x in unique_c(sources) if x[1] == 1]
         return [p for p in self if p.src in bots_with_single_prop]
        
     def add_move(self, *args):
         self.append(ProposedMove(*args))
         return self
+       
+    def add_prio(self, prio, src):
+        """ Add prio upon altering list, so we can move up 
+        conflicting positions higher in the prio list""" 
+        
+        for p in self:
+            if p.src == src:
+                p.prio += prio
+        self.sort()
        
     def sort(self, *args, **kwargs):
         return super(ProposedMoveCollection, self).sort(key=self._sort_proposals, *args, **kwargs)
@@ -178,7 +189,8 @@ class Robot():
 
         plan = self.history_plan[self.turn]
         if self.location not in plan:
-            print "Ouch! Fatal error! I couldn't find myself %s in the plan: %s" % (self.location, game)
+            print "Ouch! Fatal error! I couldn't find myself %s in the plan: %s" % (self.location, plan)
+            return ['guard']
             raise Exception("My plan calculation is flawed, as I couldn't find myself")
         
         return plan[self.location]
@@ -387,7 +399,12 @@ class Robot():
         moves = defaultdict(int)
         for e in enemies:
             for loc in self.adjacents(e):
-                moves[loc] += 1
+                moves[loc] += 2
+            
+        ## also add spawn points if we are expecting spawn
+        if self.turn % 10 == 0:
+            for i in SPAWN_POINTS:
+                moves[i] += 1
             
         return moves
     
@@ -468,15 +485,16 @@ class Robot():
             
             for dst in possibles:
                 
-                if src in self.ally_assignments:
-
-                    src_target_distance = rg.wdist(src, self.ally_assignments[src])
-                    dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
-                                        
-                    ## prepare for swarm
-                    if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
-                        score = SCORE['move_to_best_attack_spot'] + self.best_attack_spots[dst]
-                        proposals.add_move(score, 'move', src, dst)
+                ## skip active attack for now
+                #~ if src in self.ally_assignments:
+#~ 
+                    #~ src_target_distance = rg.wdist(src, self.ally_assignments[src])
+                    #~ dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
+                                        #~ 
+                    #~ ## prepare for swarm
+                    #~ if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
+                        #~ score = SCORE['move_to_best_attack_spot'] + self.best_attack_spots[dst]
+                        #~ proposals.add_move(score, 'move', src, dst)
 
 
                 ## pre-emptive strike
@@ -495,8 +513,8 @@ class Robot():
                     #~ print "%s is not in %s" % (dst, rg.loc_types(dst) )
                     score -= 5
                     
-                if is_spawn(src):
-                    score += 5
+                #~ if is_spawn(src):
+                    #~ score += 5
                     
                 if panic:
                     score += SCORE['panic']
@@ -504,14 +522,14 @@ class Robot():
                 if dst in self.enemy_next_moves:
                     score -= 100
                 
-                if dst_peer_neighbours < src_peer_neighbours:
-                    score += 2 * (9-dst_peer_neighbours) ## dont exceed 100
+                #~ if dst_peer_neighbours < src_peer_neighbours:
+                    #~ score += 2 * (9-dst_peer_neighbours) ## dont exceed 100
                     
-                if dst_center_distance < src_center_distance:
-                    score += 2
-                
-                if dst_center_distance > src_center_distance:
-                    score -= 1
+                #~ if dst_center_distance < src_center_distance:
+                    #~ score += 2
+                #~ 
+                #~ if dst_center_distance > src_center_distance:
+                    #~ score -= 1
 
                 proposals.add_move(score, 'move', src, dst)
         
@@ -542,7 +560,7 @@ class Robot():
         
         while proposals:
             
-            ## 1. check if there are bots with one proposal only
+            ## 1. check if there are bots with one proposal only (bug: could be conflicts!)
             execute_proposals = proposals.find_singles()
             
             if not execute_proposals: ## if not, then just pick highest prio
@@ -552,10 +570,21 @@ class Robot():
                 proposals.eliminate(src=p.src)
                 
                 ## if moving, we should block this dst from happening again
-                proposals.eliminate(dst=p.dst, action='move')
-
-                ## maintain master list of final moves
-                moves.append(p)
+                if p.action in ['move','guard']:
+                    proposals.eliminate(dst=p.dst) ## remove everything to this cell
+                    ## add prio to those sources that are now in conflict
+                    
+                elif p.action == 'attack':
+                    proposals.eliminate(dst=p.dst, action='move') ## prevent moves to this cell
+                    proposals.eliminate(dst=p.src, action='move') 
+                    proposals.eliminate(dst=p.src, action='attack') 
+                    
+                elif p.action == 'suicide': ## nothing, as this will free up the square
+                    pass 
+                    
+                moves.append(p) ## maintain master list of final moves
+                
+                ## 
 
         # moves is a list of proposals, need to transform to api-compatible format
         return moves.to_plan()  

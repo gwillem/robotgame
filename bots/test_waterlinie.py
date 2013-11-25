@@ -272,25 +272,25 @@ class TestRobot(unittest.TestCase):
         assert (10,9) in enemies_assigned[(9,9)], enemies_assigned
         assert ally_assignments[(8,8)] == (9,9), ally_assignments
         
-    def test_move_to_best_attack_spot(self):
-        a = [(8,8),(10,8)]
-        e = [(9,9),]
-        game = self.create_fake_game(a,e)
-        
-        self.robot.location = (8,8)
-        game['turn'] = 10
-        rv = self.robot.act(game)
-        
-        game['turn'] = 11
-        rv = self.robot.act(game)
-
-        assert rv[0] == 'move', rv
-        assert rv[1] in [(8,9),(9,8)], rv
-
-        self.robot.location = (10,8)
-        rv = self.robot.act(game)
-        assert rv[0] == 'move', rv
-        assert rv[1] in [(9,8),(10,9)], rv
+    #~ def test_move_to_best_attack_spot(self):
+        #~ a = [(8,8),(10,8)]
+        #~ e = [(9,9),]
+        #~ game = self.create_fake_game(a,e)
+        #~ 
+        #~ self.robot.location = (8,8)
+        #~ game['turn'] = 10
+        #~ rv = self.robot.act(game)
+        #~ 
+        #~ game['turn'] = 11
+        #~ rv = self.robot.act(game)
+#~ 
+        #~ assert rv[0] == 'move', rv
+        #~ assert rv[1] in [(8,9),(9,8)], rv
+#~ 
+        #~ self.robot.location = (10,8)
+        #~ rv = self.robot.act(game)
+        #~ assert rv[0] == 'move', rv
+        #~ assert rv[1] in [(9,8),(10,9)], rv
         
     def test_act_dont_move_to_best_attack_spot_when_alone(self):
         a = [(8,8),]
@@ -298,6 +298,26 @@ class TestRobot(unittest.TestCase):
         r, g = self.init_game(a, e)
         rv = r.act(g)
         assert rv[0] != 'move', rv
+        
+    def test_act_dont_collide(self):
+        a = [(6,6),(5,7),(7,7),(7,8),]
+        e = []
+        r, g = self.init_game(a, e)
+        rv1 = r.act(g)
+
+        a = [(5,7),(6,6),(7,7),(7,8),]
+        e = []
+        r, g = self.init_game(a, e)
+        rv2 = r.act(g)
+        
+        print rv1
+        print rv2
+        
+        try:
+            assert rv1[1] != rv2[1], (rv1, rv2) ## same dst
+        except IndexError:
+            pass
+
         
     def test_find_enemy_next_moves(self):
         a = [(8,8),]

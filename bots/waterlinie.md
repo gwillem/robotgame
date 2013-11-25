@@ -48,6 +48,13 @@ else sort options to:
 
 TODO
 
+* if i did this last time, do minus 1
+* detect if surrounded, then suicide
+
+* pre-attack spawn points
+* preemptive strike: attack square with most enemy moves likely
+* remove items from plan where attack and move conflict
+
 * add suicide
 * swap places if somebody is under attack
 

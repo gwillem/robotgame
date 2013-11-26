@@ -44,10 +44,10 @@ class TestRobot(unittest.TestCase):
         # a is blocked by e, and at spawn point. Panic!
         a = [ (11,1) ]
         e = [ (11,3) ]
-        r, g = self.init_game(a, e)
+        r, g = self.init_game(a, e, turn=9)
         rv = r.act(g)
         
-        assert rv == ['move',(10,1)]
+        assert rv == ['move',(10,1)], rv
         
     def test_is_static(self):
        
@@ -319,11 +319,22 @@ class TestRobot(unittest.TestCase):
             pass
 
         
+    def test_is_spawn_imminent(self):
+        r, g = self.init_game([(9,9)],[(10,10)],turn=7)
+        
+        assert r.is_spawn_imminent(within=0) == False
+        assert r.is_spawn_imminent(within=1) == False
+        assert r.is_spawn_imminent(within=2) == False
+        assert r.is_spawn_imminent(within=3) == True
+        assert r.is_spawn_imminent(within=4) == True
+        
+        
     def test_find_enemy_next_moves(self):
         a = [(8,8),]
         e = [(9,9),]
-        game = self.create_fake_game(a,e)
-        self.robot.robots = game['robots']
+        r, g = self.init_game(a, e, turn=3)
+        r.act(g)
+        
         rv = sorted(self.robot.find_enemy_next_moves())
         assert rv == sorted(self.robot.adjacents((9,9))), rv        
     

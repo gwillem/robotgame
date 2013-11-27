@@ -15,7 +15,7 @@ LOCAL = os.getenv('USER') == 'willem'
 SCORE = {
     'suicide' : 12800,
     'panic' : 6400,
-    'attack_underwhelmed_enemy' : 3200,
+    'attack_overwhelmed_enemy' : 3200,
     'move_to_best_attack_spot' : 1600,
     'move_to_safer_location' : 800,
     'attack_normal_enemy': 400,
@@ -196,7 +196,7 @@ class Robot():
             #~ log( "best attack spots: %s" % self.best_attack_spots )
             
             proposals = self.collect_all_proposals()
-            log( "proposals:\n%s" % proposals )
+            #~ log( "proposals:\n%s" % proposals )
             
             plan = self.proposals_to_plan(proposals)
             #~ log( "plan: %s" % plan )
@@ -235,7 +235,7 @@ class Robot():
         #~ log( "enemies: %s" % enemies )
 
         # search 1 and 2 wdist deep
-        for wdist in [1, 2]:
+        for wdist in [1, 2, 3]:
             for enemy in enemies:
                 ## whom of my trusty soldiers are nearby?
                 for soldier in self.find_neighbours(src=enemy, player_id=self.player_id, wdist=wdist):
@@ -248,7 +248,7 @@ class Robot():
         # todo: optimization, these bots could be reassigned another enemy!
         
         for enemy, soldiers in enemies_assigned.items():
-            if len(soldiers) < 2:
+            if len(soldiers) < 3:
                 del enemies_assigned[enemy]
 
         ## and build ally_assignments based on enemies_assigned
@@ -464,7 +464,7 @@ class Robot():
         """
         
         panic = False
-        aggressive = True if self.robots[src]['hp'] >= 40 else False
+        aggressive = True if self.robots[src]['hp'] >= 30 else False
 
         proposals = ProposedMoveCollection()
         
@@ -488,7 +488,7 @@ class Robot():
             for x in nearby_enemies if self.count_neighbours(src=x,player_id=self.player_id) > 1]
         
         for e in overwhelmed_enemies:
-            score = SCORE['attack_underwhelmed_enemy'] + e[1]
+            score = SCORE['attack_overwhelmed_enemy'] + e[1]
             proposals.add_move(score, 'attack', src, e[0])
 
         for e in nearby_enemies:
@@ -503,23 +503,27 @@ class Robot():
         
         for dst in possibles:
 
-            base_move_score = 0
-
-            if aggressive:
-                if src in self.ally_assignments:
-
-                    src_target_distance = rg.wdist(src, self.ally_assignments[src])
-                    dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
-                                        
-                    ## prepare for swarm
-                    if dst in self.best_attack_spots and dst_target_distance < src_target_distance:
-                        score = SCORE['move_to_best_attack_spot'] + self.best_attack_spots[dst]
-                        proposals.add_move(score, 'move', src, dst)
-
+            # pre emptive strike
             if dst in self.enemy_next_moves:
                 score = SCORE['preemptive_strike'] + self.enemy_next_moves[dst]
                 proposals.add_move(score, 'attack', src, dst)
+
+
+            # only moving from here
+            base_move_score = 0
+
+            if dst in self.enemy_next_moves:
                 base_move_score -= 20 * self.enemy_next_moves[dst]
+
+            if aggressive and src in self.ally_assignments:
+                src_target_distance = rg.wdist(src, self.ally_assignments[src])
+                dst_target_distance = rg.wdist(dst, self.ally_assignments[src])
+                                    
+                ## prepare for swarm
+                if dst in self.best_attack_spots:
+                    base_move_score += SCORE['move_to_best_attack_spot']
+                    
+                base_move_score += 100 * (src_target_distance - dst_target_distance)
             
             # minus 1, so it will not count itself
             dst_enemy_neighbours = self.count_neighbours(src=dst,player_id=self.enemy_id) 

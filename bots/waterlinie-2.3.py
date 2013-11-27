@@ -134,6 +134,16 @@ def other_player_id(player_id):
 
 class Robot():
     
+    def find_friends_nearby(self, src, wdist=3):
+        pid = self.robots[src]['player_id']
+        locs = self.ring_search(src, wdist=wdist, inclusive=True)
+        
+        print "Src:", src
+        print locs
+        locs.remove(src)
+        friends = [x for x in locs if x in self.robots and self.robots[x]['player_id'] == pid]
+        return friends
+    
     def turns_to_spawn(self):
         return (10 - (self.turn % 10)) % 10
     
@@ -427,9 +437,6 @@ class Robot():
                 
         return enemies
     
-    def panic(self, src):
-        log(" i am panicking!!" )
-     
     def find_safer_neighbours(self, src):
         can_move_here = self.adjacents(src, filter_id=self.enemy_id)
                 
@@ -457,7 +464,7 @@ class Robot():
         """
         
         panic = False
-        aggressive = True
+        aggressive = True if self.robots[src]['hp'] >= 40 else False
 
         proposals = ProposedMoveCollection()
         

@@ -45,36 +45,29 @@ else sort options to:
     100 try move_to_center_but_away_from_other_bots
      50 stand still
 
-
-TODO
-
-* if i did this last time, do minus 1
+# DONE
 * detect if surrounded, then suicide
-
 * pre-attack spawn points
 * preemptive strike: attack square with most enemy moves likely
 * remove items from plan where attack and move conflict
-
-* add suicide
-* swap places if somebody is under attack
-
-* If last preemptive strike didn't yield result, don't repeat
-* Run for your life if blocked at spawn point
-
-* If enemy neighbour is surrounded by >1 ally, then attack. 
 * If surrounded by enemies, flee to square with less enemies
 * Only flee spawn point if turn % 10 == 0
-* Flee: don't go to spawn point
-* If a bot is locked AND at spawn point AND can't flee but also can't attack, then it 
-  should run!
-* self.adjacents is ugly
-* If stuck at spawn, go to other spawn
 * Only classify enemy as vulnerable, if he is static -> is_static()
-* Optimize ally assignments (in assign_enemies()), as some bots now miss the boat
+* don't move to spawn if spawn is imminent
+* move to the square with the last amount of enemies
 
-1. match replay keyboard shortcuts
-3. match > display some more info about owners
-4. disable -> remove bot
+
+# TODO
+
+* props.find_singles() should first return the spots that have
+  * only one move
+  * or can only stay (either guard or attack)
+* if i did this last time, do minus 1
+* swap places if somebody is under attack
+* If enemy neighbour is surrounded by >1 ally, then attack. 
+* If last preemptive strike didn't yield result, don't repeat
+* Run for your life if blocked at spawn point
+* Optimize ally assignments (in assign_enemies()), as some bots now miss the boat
 
 ==
 

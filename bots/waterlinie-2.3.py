@@ -2,15 +2,12 @@ from __future__ import division
 from collections import defaultdict
 import math
 import rg
-import os
-import time
 
 """
 See waterlinie.md for strategy elaboration 
 """
 
-DEBUG = True # os.getenv('USER') == 'willem'
-LOCAL = os.getenv('USER') == 'willem'
+DEBUG = True
 
 SCORE = {
     'suicide' : 12800,
@@ -27,12 +24,14 @@ SPAWN_POINTS = ((7,1),(8,1),(9,1),(10,1),(11,1),(5,2),(6,2),(12,2),(13,2),(3,3),
 
 CENTER_POINT = (9,9)
 
+import time
 def print_timing(func):
     def wrapper(*arg):
         t1 = time.time()
         res = func(*arg)
         t2 = time.time()
-        print '%-15.15s %6d ms' % (func.func_name, int ( (t2-t1)*1000.0 ))
+        delta =  int ( (t2-t1)*1000.0 )
+        if delta > 0: print '%-15.15s %6d ms' % (func.func_name, delta)
         return res
     return wrapper
 
@@ -65,16 +64,15 @@ class ProposedMoveCollection(list):
     def _sort_proposals(self, p):
         """Sort based on priority, distance to center, angle to 
         center (deterministic)""" 
-        dist = rg.dist(p.dst, CENTER_POINT)
-        angle = center_angle(p.dst)
-        return (-p.prio, dist, angle)
+#        dist = rg.dist(p.dst, CENTER_POINT)
+#        angle = center_angle(p.dst)
+        return (-p.prio)
        
     def to_plan(self):
         return dict((p.src, p.to_action()) for p in self)
        
     def find_singles(self):
         """Return proposed moves for bots that have only a single proposal"""
-        self.sort()
         sources = [p.src for p in self]
         ## todo: should sort so that moves have higher priority to prevent collisions
         bots_with_single_prop = [ x[0] for x in unique_c(sources) if x[1] == 1]
@@ -91,8 +89,8 @@ class ProposedMoveCollection(list):
         for p in self:
             if p.src == src:
                 p.prio += prio
-        self.sort()
-       
+        #~ self.sort()
+    
     def sort(self, *args, **kwargs):
         return super(ProposedMoveCollection, self).sort(key=self._sort_proposals, *args, **kwargs)
         
@@ -103,7 +101,6 @@ class ProposedMoveCollection(list):
             mystr += "%3d. %s\n" % (i, item)
         return mystr
             
-        
     def eliminate(self, **kwargs):
         """ delete items for which ALL kwargs hold true 
         http://stackoverflow.com/questions/6022764/python-removing-list-element-while-iterating-over-list
@@ -134,6 +131,7 @@ def other_player_id(player_id):
 
 class Robot():
     
+    #~ @print_timing
     def find_friends_nearby(self, src, wdist=3):
         pid = self.robots[src]['player_id']
         locs = self.ring_search(src, wdist=wdist, inclusive=True)
@@ -150,6 +148,7 @@ class Robot():
     def is_spawn_imminent(self, within=0):
         return self.turns_to_spawn() <= within
     
+    #~ @print_timing
     def act_sanity_check(self):
 
         if self.location not in self.robots:
@@ -166,7 +165,7 @@ class Robot():
         if not hasattr(self, 'history_plan'):
             self.history_plan = {}        
     
-    #~ @print_timing
+    @print_timing
     def act(self, game):
         
         self.robots   = game['robots']
@@ -179,7 +178,7 @@ class Robot():
             """ Only do this for the first bot in a turn.
             They all share the same object, so skip redundant calculations """
 
-            log( "********** turn %d *********" % game['turn'] )
+            #~ log( "********** turn %d *********" % game['turn'] )
             #~ log ("player_id: %s, hp: %s, location: %s" % (self.player_id, self.hp, self.location,))
             #~ log( "I received game data: %s" % game )
 
@@ -205,7 +204,7 @@ class Robot():
         plan = self.history_plan[self.turn]
         
         if self.location not in plan:
-            print "Ouch! Fatal error! I couldn't find myself %s in the plan: %s" % (self.location, plan)
+            print "Ouch! Fatal error! I couldn't find myself %s in the plan: %s and the game info was %s" % (self.location, plan, game)
             return ['guard']
             raise Exception("My plan calculation is flawed, as I couldn't find myself")
         
@@ -355,6 +354,7 @@ class Robot():
         else:
             return [loc for loc in self.robots]    
         
+    #~ @print_timing
     def collect_all_proposals(self):
         """ Calculate proposed moves for all of my peers """
         proposals = ProposedMoveCollection()
@@ -381,24 +381,6 @@ class Robot():
             raise Exception("Typeerror %s, src = %s and wdist = %s" % (e,src,wdist))
         
         return set(result)
-    
-    def try_to_flee(self, src):
-        locs = self.adjacents(src, only_empty=True)
-        
-        # find locs with least amount of enemy neighbours
-        locs_safe = [loc for loc in locs \
-            if self.count_neighbours(src=loc,player_id=self.enemy_id) == 0 \
-            and not is_spawn(loc)]
-        
-        if locs_safe:
-            return ProposedMove(100, 'move', src, locs_safe[0])
-            
-        # no safe locations.. should i run anyway?
-        if is_spawn(src) and locs:
-            return ProposedMove(90, 'move', src, locs[0])
-            
-        # there are no alternatives...
-        raise CannotFlee("Can't flee! No safe locations")
             
     def find_enemy_next_moves(self):
         """Return dict of moves that enemy /could/ move to next turn, 
@@ -554,6 +536,7 @@ class Robot():
         
         return proposals
         
+    #~ @print_timing
     def proposals_to_plan(self, proposals):
         """ Sort proposals on priority and fill the projected map 
                 
@@ -574,10 +557,12 @@ class Robot():
         }
         """
 
-        proposals.sort()
+        #~ proposals.sort()
         moves = ProposedMoveCollection()
         
         while proposals:
+            
+            proposals.sort()
             
             ## 1. check if there are bots with one proposal only (bug: could be conflicts!)
             execute_proposals = proposals.find_singles()

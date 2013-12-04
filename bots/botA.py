@@ -1,5 +1,4 @@
 import rg
-import random
 
 class Robot:
     def act(self, game):
@@ -13,15 +12,13 @@ class Robot:
                 if rg.dist(loc, self.location) <= 1:
                     return ['attack', loc]
 
-        # otherwise, move randomly but prefer non-spawn points
-        adj = [x for x in rg.locs_around(self.location) \
-                if 'obstacle' not in rg.loc_types(x)]
+        self_to_center = rg.wdist(self.location, rg.CENTER_POINT)
+
+        # try to approach the center
+        for dst in rg.locs_around(self.location):
+            dst_to_center = rg.wdist(dst, rg.CENTER_POINT)
+            if dst_to_center < self_to_center:
+                return ['move', dst]
         
-        non_spawn = [x for x in adj if 'spawn' not in rg.loc_types(x)]
-        
-        possibles = non_spawn or adj
-        if possibles:
-            return ['move', random.choice(possibles)]
-        
+        # it doesnt matter
         return ['guard']
-            
